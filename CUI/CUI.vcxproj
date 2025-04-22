@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{48316892-3a38-48f2-8c34-4d676304f769}</ProjectGuid>
+    <RootNamespace>CUI</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>Intel C++ Compiler 2025</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>Intel C++ Compiler 2025</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ExternalIncludePath>D:\Projects\CppUtils;$(ExternalIncludePath)</ExternalIncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ExternalIncludePath>D:\Projects\CppUtils;$(ExternalIncludePath)</ExternalIncludePath>
+    <CopyCppRuntimeToOutputDir>false</CopyCppRuntimeToOutputDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ExternalIncludePath>D:\Projects\CppUtils;$(ExternalIncludePath)</ExternalIncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ExternalIncludePath>D:\Projects\CppUtils;$(ExternalIncludePath)</ExternalIncludePath>
+    <CopyCppRuntimeToOutputDir>false</CopyCppRuntimeToOutputDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <PrecompiledHeaderFile />
+      <PrecompiledHeaderOutputFile />
+      <EnableModules>false</EnableModules>
+      <BuildStlModules>true</BuildStlModules>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <PrecompiledHeaderFile />
+      <PrecompiledHeaderOutputFile />
+      <EnableModules>false</EnableModules>
+      <BuildStlModules>true</BuildStlModules>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <PrecompiledHeaderFile />
+      <PrecompiledHeaderOutputFile />
+      <EnableModules>false</EnableModules>
+      <BuildStlModules>true</BuildStlModules>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <UACExecutionLevel>AsInvoker</UACExecutionLevel>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <MinimalRebuild>false</MinimalRebuild>
+      <PrecompiledHeaderFile />
+      <PrecompiledHeaderOutputFile />
+      <EnableModules>false</EnableModules>
+      <BuildStlModules>true</BuildStlModules>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <IgnoreAllDefaultLibraries>
+      </IgnoreAllDefaultLibraries>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
+      <GenerateWindowsMetadata>false</GenerateWindowsMetadata>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <MergeSections>.rdata=.text</MergeSections>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\CppUtils\Graphics\Colors.h" />
+    <ClInclude Include="..\..\CppUtils\Graphics\Factory.h" />
+    <ClInclude Include="..\..\CppUtils\Graphics\Font.h" />
+    <ClInclude Include="..\..\CppUtils\Graphics\Graphics.h" />
+    <ClInclude Include="..\..\CppUtils\Graphics\nanosvg.h" />
+    <ClInclude Include="..\..\CppUtils\Media\AudioFile.h" />
+    <ClInclude Include="..\..\CppUtils\Media\H264Encoder.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Clipboard.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Convert.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\CRandom.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\DataPack.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\DateTime.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\defines.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Dialog.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Dictionary.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Environment.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Event.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\File.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\FileInfo.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\FileStream.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Guid.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\HttpHelper.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\httplib.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\json.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\List.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\MD5.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\MemLoadLibrary2.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Process.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\ProcessOperator.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Registry.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\SHA256.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Socket.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\SqliteHelper.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\sqlite\sqlite3.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\StopWatch.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\StringBuilder.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\StringHelper.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Thread.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\TimeSpan.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Tuple.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\Utils.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\crc32.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\deflate.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\gzguts.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inffast.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inffixed.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inflate.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inftrees.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\trees.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\zconf.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\zlib.h" />
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\zutil.h" />
+    <ClInclude Include="AudioView.h" />
+    <ClInclude Include="BG.h" />
+    <ClInclude Include="CustomControls.h" />
+    <ClInclude Include="GUI\Application.h" />
+    <ClInclude Include="GUI\Button.h" />
+    <ClInclude Include="GUI\CheckBox.h" />
+    <ClInclude Include="GUI\ComboBox.h" />
+    <ClInclude Include="GUI\Control.h" />
+    <ClInclude Include="GUI\Form.h" />
+    <ClInclude Include="GUI\GridView.h" />
+    <ClInclude Include="GUI\Label.h" />
+    <ClInclude Include="GUI\NotifyIcon.h" />
+    <ClInclude Include="GUI\Panel.h" />
+    <ClInclude Include="GUI\PasswordBox.h" />
+    <ClInclude Include="GUI\PictureBox.h" />
+    <ClInclude Include="GUI\ProgressBar.h" />
+    <ClInclude Include="GUI\RadioBox.h" />
+    <ClInclude Include="GUI\RichTextBox.h" />
+    <ClInclude Include="GUI\RoundTextBox.h" />
+    <ClInclude Include="GUI\Switch.h" />
+    <ClInclude Include="GUI\TabControl.h" />
+    <ClInclude Include="GUI\Taskbar.h" />
+    <ClInclude Include="GUI\TextBox.h" />
+    <ClInclude Include="GUI\TreeView.h" />
+    <ClInclude Include="imgs.h" />
+    <ClInclude Include="RSA.h" />
+    <ClInclude Include="WeChatHelper.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\CppUtils\Graphics\Factory.cpp" />
+    <ClCompile Include="..\..\CppUtils\Graphics\Font.cpp" />
+    <ClCompile Include="..\..\CppUtils\Graphics\Graphics.cpp" />
+    <ClCompile Include="..\..\CppUtils\Graphics\nanosvg.cpp" />
+    <ClCompile Include="..\..\CppUtils\Media\H264Encoder.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Clipboard.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Convert.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\CRandom.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\DataPack.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\DateTime.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Dialog.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Environment.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Event.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\File.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\FileInfo.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\FileStream.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Guid.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\HttpHelper.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\HttpHelper1.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\MD5.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Process.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\ProcessOperator.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Registry.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\SHA256.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Socket.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\SqliteHelper.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\sqlite\sqlite3.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\StopWatch.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\StringBuilder.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\StringHelper.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Thread.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\TimeSpan.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\Utils.cpp" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\adler32.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\compress.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\crc32.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\deflate.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\infback.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\inffast.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\inflate.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\inftrees.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\trees.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\uncompr.c" />
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\zutil.c" />
+    <ClCompile Include="AudioView.cpp" />
+    <ClCompile Include="CustomControls.cpp" />
+    <ClCompile Include="GUI\Application.cpp" />
+    <ClCompile Include="GUI\Button.cpp" />
+    <ClCompile Include="GUI\CheckBox.cpp" />
+    <ClCompile Include="GUI\ComboBox.cpp" />
+    <ClCompile Include="GUI\Control.cpp" />
+    <ClCompile Include="GUI\Form.cpp" />
+    <ClCompile Include="GUI\GridView.cpp" />
+    <ClCompile Include="GUI\Label.cpp" />
+    <ClCompile Include="GUI\NotifyIcon.cpp" />
+    <ClCompile Include="GUI\Panel.cpp" />
+    <ClCompile Include="GUI\PasswordBox.cpp" />
+    <ClCompile Include="GUI\PictureBox.cpp" />
+    <ClCompile Include="GUI\ProgressBar.cpp" />
+    <ClCompile Include="GUI\RadioBox.cpp" />
+    <ClCompile Include="GUI\RichTextBox.cpp" />
+    <ClCompile Include="GUI\RoundTextBox.cpp" />
+    <ClCompile Include="GUI\Switch.cpp" />
+    <ClCompile Include="GUI\TabControl.cpp" />
+    <ClCompile Include="GUI\Taskbar.cpp" />
+    <ClCompile Include="GUI\TextBox.cpp" />
+    <ClCompile Include="GUI\TreeView.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="RSA.cpp" />
+    <ClCompile Include="WeChatHelper.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

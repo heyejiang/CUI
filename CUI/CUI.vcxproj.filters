@@ -1,0 +1,489 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Graphics">
+      <UniqueIdentifier>{7120db01-41c6-41dd-9312-3dbabb56aa6b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="GUI">
+      <UniqueIdentifier>{54ac85a5-6857-4899-b29b-b22c3adb784b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="PML">
+      <UniqueIdentifier>{76bfdfa6-aeaa-4e9a-9fdf-5b138c262b06}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utils">
+      <UniqueIdentifier>{2051b208-2f8e-48e5-9985-cbe3f5628ce8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utils\zlib">
+      <UniqueIdentifier>{4fefe241-1190-43e9-a3d0-5fd16179119f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Media">
+      <UniqueIdentifier>{6dbf8e5f-29fd-4c6f-bea3-c9b37d0ac1bb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utils\sqlite">
+      <UniqueIdentifier>{70d0b0cb-1f66-4a0c-808e-aada927be581}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="GUI\Control.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Form.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Application.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Button.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\CheckBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\ComboBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\GridView.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Label.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Panel.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\PasswordBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\PictureBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\ProgressBar.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\RadioBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\RichTextBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\RoundTextBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Switch.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\TabControl.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\TextBox.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="CustomControls.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="imgs.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\TreeView.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\Taskbar.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI\NotifyIcon.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\crc32.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\deflate.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\gzguts.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inffast.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inffixed.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inflate.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\inftrees.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\trees.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\zconf.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\zlib.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\zlib\zutil.h">
+      <Filter>Utils\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Utils.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Clipboard.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Convert.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\CRandom.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\DataPack.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\DateTime.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\defines.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Dialog.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Dictionary.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Environment.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Event.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\File.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\FileInfo.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\FileStream.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Guid.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\HttpHelper.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\json.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\List.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\MemLoadLibrary2.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Process.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\ProcessOperator.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Registry.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Socket.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\SqliteHelper.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\StopWatch.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\StringBuilder.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\StringHelper.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Thread.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\TimeSpan.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\Tuple.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Graphics\Colors.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Graphics\Factory.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Graphics\Font.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Graphics\Graphics.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Graphics\nanosvg.h">
+      <Filter>Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioView.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="BG.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Media\AudioFile.h">
+      <Filter>Media</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Media\H264Encoder.h">
+      <Filter>Media</Filter>
+    </ClInclude>
+    <ClInclude Include="WeChatHelper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\MD5.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\SHA256.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="RSA.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\sqlite\sqlite3.h">
+      <Filter>Utils\sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CppUtils\Utils\httplib.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="GUI\Control.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Form.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Application.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Button.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\TextBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\CheckBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\ComboBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\GridView.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Label.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Panel.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\PasswordBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\PictureBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\ProgressBar.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\RadioBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\RichTextBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\RoundTextBox.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Switch.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\TabControl.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="CustomControls.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\TreeView.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\Taskbar.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="GUI\NotifyIcon.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\adler32.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\compress.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\crc32.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\deflate.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\infback.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\inffast.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\inflate.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\inftrees.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\trees.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\uncompr.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\zlib\zutil.c">
+      <Filter>Utils\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Clipboard.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Convert.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\CRandom.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\DataPack.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\DateTime.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Dialog.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Environment.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Event.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\File.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\FileInfo.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\FileStream.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Guid.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\HttpHelper.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Process.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\ProcessOperator.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Registry.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Socket.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\SqliteHelper.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\StopWatch.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\StringBuilder.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\StringHelper.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Thread.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\TimeSpan.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\Utils.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Graphics\Factory.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Graphics\Font.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Graphics\Graphics.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Graphics\nanosvg.cpp">
+      <Filter>Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioView.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Media\H264Encoder.cpp">
+      <Filter>Media</Filter>
+    </ClCompile>
+    <ClCompile Include="WeChatHelper.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\HttpHelper1.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\MD5.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\SHA256.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="RSA.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CppUtils\Utils\sqlite\sqlite3.c">
+      <Filter>Utils\sqlite</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
