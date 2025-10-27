@@ -29,13 +29,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>Intel C++ Compiler 2025</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>Intel C++ Compiler 2025</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -81,7 +81,7 @@
     <ExternalIncludePath>D:\Projects\CppUtils;$(ExternalIncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ExternalIncludePath>D:\Projects\CppUtils;$(ExternalIncludePath)</ExternalIncludePath>
+    <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
     <CopyCppRuntimeToOutputDir>false</CopyCppRuntimeToOutputDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -92,11 +92,12 @@
       <ConformanceMode>true</ConformanceMode>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
       <EnableModules>false</EnableModules>
       <BuildStlModules>true</BuildStlModules>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -114,7 +115,7 @@
       <ConformanceMode>true</ConformanceMode>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
       <EnableModules>false</EnableModules>
@@ -136,11 +137,12 @@
       <ConformanceMode>true</ConformanceMode>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
       <EnableModules>false</EnableModules>
       <BuildStlModules>true</BuildStlModules>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -158,13 +160,13 @@
       <ConformanceMode>true</ConformanceMode>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <MinimalRebuild>false</MinimalRebuild>
       <PrecompiledHeaderFile />
       <PrecompiledHeaderOutputFile />
       <EnableModules>false</EnableModules>
       <BuildStlModules>true</BuildStlModules>
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FavorSizeOrSpeed>Size</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
@@ -183,59 +185,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\CppUtils\Graphics\Colors.h" />
-    <ClInclude Include="..\..\CppUtils\Graphics\Factory.h" />
-    <ClInclude Include="..\..\CppUtils\Graphics\Font.h" />
-    <ClInclude Include="..\..\CppUtils\Graphics\Graphics.h" />
-    <ClInclude Include="..\..\CppUtils\Graphics\nanosvg.h" />
-    <ClInclude Include="..\..\CppUtils\Media\AudioFile.h" />
-    <ClInclude Include="..\..\CppUtils\Media\H264Encoder.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Clipboard.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Convert.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\CRandom.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\DataPack.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\DateTime.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\defines.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Dialog.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Dictionary.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Environment.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Event.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\File.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\FileInfo.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\FileStream.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Guid.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\HttpHelper.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\httplib.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\json.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\List.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\MD5.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\MemLoadLibrary2.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Process.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\ProcessOperator.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Registry.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\SHA256.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Socket.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\SqliteHelper.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\sqlite\sqlite3.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\StopWatch.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\StringBuilder.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\StringHelper.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Thread.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\TimeSpan.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Tuple.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\Utils.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\crc32.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\deflate.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\gzguts.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\inffast.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\inffixed.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\inflate.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\inftrees.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\trees.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\zconf.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\zlib.h" />
-    <ClInclude Include="..\..\CppUtils\Utils\zlib\zutil.h" />
-    <ClInclude Include="AudioView.h" />
+    <ClInclude Include="DemoWindow.h" />
     <ClInclude Include="CustomControls.h" />
     <ClInclude Include="GUI\Application.h" />
     <ClInclude Include="GUI\Button.h" />
@@ -258,56 +208,10 @@
     <ClInclude Include="GUI\Taskbar.h" />
     <ClInclude Include="GUI\TextBox.h" />
     <ClInclude Include="GUI\TreeView.h" />
-    <ClInclude Include="hde\hde64.h" />
     <ClInclude Include="imgs.h" />
-    <ClInclude Include="WeChatHelper.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\CppUtils\Graphics\Factory.cpp" />
-    <ClCompile Include="..\..\CppUtils\Graphics\Font.cpp" />
-    <ClCompile Include="..\..\CppUtils\Graphics\Graphics.cpp" />
-    <ClCompile Include="..\..\CppUtils\Graphics\nanosvg.cpp" />
-    <ClCompile Include="..\..\CppUtils\Media\H264Encoder.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Clipboard.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Convert.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\CRandom.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\DataPack.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\DateTime.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Dialog.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Environment.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Event.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\File.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\FileInfo.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\FileStream.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Guid.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\HttpHelper.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\HttpHelper1.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\MD5.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Process.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\ProcessOperator.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Registry.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\SHA256.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Socket.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\SqliteHelper.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\sqlite\sqlite3.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\StopWatch.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\StringBuilder.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\StringHelper.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Thread.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\TimeSpan.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\Utils.cpp" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\adler32.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\compress.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\crc32.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\deflate.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\infback.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\inffast.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\inflate.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\inftrees.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\trees.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\uncompr.c" />
-    <ClCompile Include="..\..\CppUtils\Utils\zlib\zutil.c" />
-    <ClCompile Include="AudioView.cpp" />
+    <ClCompile Include="DemoWindow.cpp" />
     <ClCompile Include="CustomControls.cpp" />
     <ClCompile Include="GUI\Application.cpp" />
     <ClCompile Include="GUI\Button.cpp" />
@@ -330,9 +234,7 @@
     <ClCompile Include="GUI\Taskbar.cpp" />
     <ClCompile Include="GUI\TextBox.cpp" />
     <ClCompile Include="GUI\TreeView.cpp" />
-    <ClCompile Include="hde\hde64.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="WeChatHelper.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

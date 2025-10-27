@@ -1,13 +1,10 @@
-﻿#include "AudioView.h"
+﻿#include "DemoWindow.h"
 int main()
 {
-    //http://sym101.com:5000/
-
-	HttpHelper::Get("http://sym101.com:5000/");
-	AudioView* av = new AudioView();
-	av->Show();
+    DemoWindow* form = new DemoWindow();
+	form->Show();
     NotifyIcon notifyIcon;
-    notifyIcon.InitNotifyIcon(av->Handle, 1);
+    notifyIcon.InitNotifyIcon(form->Handle, 1);
     notifyIcon.SetIcon(LoadIcon(NULL, IDI_APPLICATION));
     notifyIcon.SetToolTip("应用程序");
     notifyIcon.ShowNotifyIcon();
@@ -16,8 +13,6 @@ int main()
 
     
     NotifyIconMenuItem settingsMenu("设置", 2);
-    settingsMenu.HasSubMenu = true;
-    settingsMenu.SubMenu = CreatePopupMenu();
 
     
     settingsMenu.AddSubItem(NotifyIconMenuItem("音频设置", 21));
@@ -25,7 +20,6 @@ int main()
     settingsMenu.AddSubItem(NotifyIconMenuItem::CreateSeparator());
     settingsMenu.AddSubItem(NotifyIconMenuItem("高级设置", 23));
 
-    
     notifyIcon.AddMenuItem(settingsMenu);
 
     

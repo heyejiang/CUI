@@ -1,4 +1,4 @@
-﻿#include "AudioView.h"
+﻿#include "DemoWindow.h"
 #include "imgs.h"
 
 void label1_OnMouseWheel(class Control* sender, MouseEventArgs e)
@@ -13,17 +13,17 @@ void button1_OnMouseClick(class Control* sender, MouseEventArgs e)
 }
 void radiobox1_OnChecked(class Control* sender)
 {
-	((AudioView*)sender->ParentForm)->radiobox2->Checked = false;
-	((AudioView*)sender->ParentForm)->radiobox2->PostRender();
+	((DemoWindow*)sender->ParentForm)->radiobox2->Checked = false;
+	((DemoWindow*)sender->ParentForm)->radiobox2->PostRender();
 }
 void radiobox2_OnChecked(class Control* sender)
 {
-	((AudioView*)sender->ParentForm)->radiobox1->Checked = false;
-	((AudioView*)sender->ParentForm)->radiobox1->PostRender();
+	((DemoWindow*)sender->ParentForm)->radiobox1->Checked = false;
+	((DemoWindow*)sender->ParentForm)->radiobox1->PostRender();
 }
 void bt2_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
-	AudioView* form = ((AudioView*)sender->ParentForm);
+	DemoWindow* form = ((DemoWindow*)sender->ParentForm);
 	PictureBox* picturebox1 = form->picturebox1;
 	OpenFileDialog ofd;
 
@@ -58,17 +58,17 @@ void bt2_OnMouseClick(class Control* sender, MouseEventArgs e)
 void sw1_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
 	Switch* sw = (Switch*)sender;
-	((AudioView*)sender->ParentForm)->gridview1->Enable = sw->Checked;
+	((DemoWindow*)sender->ParentForm)->gridview1->Enable = sw->Checked;
 }
 void sw2_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
 	Switch* sw = (Switch*)sender;
-	((AudioView*)sender->ParentForm)->gridview1->Visible = sw->Checked;
+	((DemoWindow*)sender->ParentForm)->gridview1->Visible = sw->Checked;
 }
 void iconButton_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
 }
-AudioView::AudioView() : Form(L"", { 0,0 }, { 1280,600 })
+DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 {
 
 	bmps[0] = this->Render->ToBitmapFromSvg(_0_ico);

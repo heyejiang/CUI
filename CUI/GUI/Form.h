@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "Utils/Utils.h"
+#include <CppUtils/Utils/Utils.h>
 #include "Control.h"
 #include "Application.h"
 #include "Button.h"

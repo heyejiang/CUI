@@ -1,8 +1,7 @@
 ﻿#include "Form.h"
 #include "NotifyIcon.h"
-#include "Graphics/Factory.h"
-#include "Graphics/Graphics.h"
-#include "NotifyIcon.h"
+#include <CppUtils/Graphics/Factory.h>
+#include <CppUtils/Graphics/Graphics.h>
 #include <dwmapi.h>
 #include <windowsx.h>
 #pragma comment(lib, "Dwmapi.lib")
@@ -169,7 +168,6 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 		NULL,
 		GetModuleHandleW(0),
 		0);
-	PROPERTY
 	SetWindowLongPtrW(this->Handle, GWLP_USERDATA, (LONG_PTR)this ^ 0xFFFFFFFFFFFFFFFF);
 	
 	DragAcceptFiles,(this->Handle, TRUE);

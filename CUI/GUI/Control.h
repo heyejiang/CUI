@@ -1,8 +1,8 @@
 ﻿#pragma once
-#include "Graphics/Colors.h"
-#include "Graphics/Font.h"
-#include "Graphics/Graphics.h"
-#include "Utils/Event.h"
+#include <CppUtils/Graphics/Colors.h>
+#include <CppUtils/Graphics/Font.h>
+#include <CppUtils/Graphics/Graphics.h>
+#include <CppUtils/Utils/Event.h>
 #include <string>
 #include <vector>
 

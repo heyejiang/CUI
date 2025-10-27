@@ -2,10 +2,10 @@
 #include <iostream>
 #include "GUI/Form.h"
 #include "CustomControls.h"
-class AudioView : public Form
+class DemoWindow : public Form
 {
 public:
-	AudioView();
+    DemoWindow();
 
     ID2D1Bitmap* bmps[10]{};
     ID2D1Bitmap* icos[8];

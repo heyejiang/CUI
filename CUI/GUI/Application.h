@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "Utils/Utils.h"
+#include <CppUtils/Utils/Utils.h>
 class Application
 {
 public:

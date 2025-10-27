@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include <string>
 #include <vector>
-#include "Utils/Event.h"
+#include <CppUtils/Utils/Event.h>
 
 
 class NotifyIconMenuItem
