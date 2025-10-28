@@ -1,6 +1,91 @@
 ﻿#include "DemoWindow.h"
 #include "imgs.h"
-
+#include "nanosvg.h"
+ID2D1Bitmap* ToBitmapFromSvg(const char* data) {
+	int len = strlen(data) + 1;
+	char* svg_text = new char[len];
+	memcpy(svg_text, data, len);
+	NSVGimage* image = nsvgParse(svg_text, "px", 96.0f);
+	float percen = 1.0f;
+	if (image->width > 4096 || image->height > 4096) {
+		float maxv = image->width > image->height ? image->width : image->height;
+		percen = 4096.0f / maxv;
+	}
+	auto subg = new D2DGraphics(image->width * percen, image->height * percen);
+	NSVGshape* shape;
+	NSVGpath* path;
+	subg->BeginRender();
+	subg->Clear(D2D1::ColorF(0, 0, 0, 0));
+	for (shape = image->shapes; shape != NULL; shape = shape->next) {
+		auto geo = Factory::CreateGeomtry();
+		if (geo) {
+			ID2D1GeometrySink* skin = NULL;
+			geo->Open(&skin);
+			if (skin) {
+				for (path = shape->paths; path != NULL; path = path->next) {
+					for (int i = 0; i < path->npts - 1; i += 3) {
+						float* p = &path->pts[i * 2];
+						if (i == 0)
+							skin->BeginFigure({ p[0] * percen, p[1] * percen }, D2D1_FIGURE_BEGIN_FILLED);
+						skin->AddBezier({ {p[2] * percen, p[3] * percen},{p[4] * percen, p[5] * percen},{p[6] * percen, p[7] * percen} });
+					}
+					skin->EndFigure(path->closed ? D2D1_FIGURE_END_CLOSED : D2D1_FIGURE_END_OPEN);
+				}
+			}
+			skin->Close();
+		}
+		auto _get_svg_brush = [](NSVGpaint paint, float opacity, D2DGraphics* g) ->ID2D1Brush* {
+			const auto ic2fc = [](int colorInt, float opacity)->D2D1_COLOR_F {
+				return D2D1_COLOR_F{ (float)GetRValue(colorInt) / 255.0f ,(float)GetGValue(colorInt) / 255.0f ,(float)GetBValue(colorInt) / 255.0f ,opacity };
+				};
+			switch (paint.type) {
+			case NSVG_PAINT_NONE: {
+				return NULL;
+			}
+								break;
+			case NSVG_PAINT_COLOR: {
+				return g->CreateSolidColorBrush(ic2fc(paint.color, opacity));
+			}
+								 break;
+			case NSVG_PAINT_LINEAR_GRADIENT: {
+				std::vector<D2D1_GRADIENT_STOP> cols;
+				for (int i = 0; i < paint.gradient->nstops; i++) {
+					auto stop = paint.gradient->stops[i];
+					cols.push_back({ stop.offset, ic2fc(stop.color, opacity) });
+				}
+				return g->CreateLinearGradientBrush(cols.data(), cols.size());
+			}
+										   break;
+			case NSVG_PAINT_RADIAL_GRADIENT: {
+				std::vector<D2D1_GRADIENT_STOP> cols;
+				for (int i = 0; i < paint.gradient->nstops; i++) {
+					auto stop = paint.gradient->stops[i];
+					cols.push_back({ stop.offset, ic2fc(stop.color, opacity) });
+				}
+				return g->CreateRadialGradientBrush(cols.data(), cols.size(), { paint.gradient->fx,paint.gradient->fy });
+			}
+										   break;
+			}
+			return NULL;
+			};
+		ID2D1Brush* brush = _get_svg_brush(shape->fill, shape->opacity, subg);
+		if (brush) {
+			subg->FillGeometry(geo, brush);
+			brush->Release();
+		}
+		brush = _get_svg_brush(shape->stroke, shape->opacity, subg);
+		if (brush) {
+			subg->DrawGeometry(geo, brush, shape->strokeWidth);
+			brush->Release();
+		}
+		geo->Release();
+	}
+	nsvgDelete(image);
+	subg->EndRender();
+	auto result = (ID2D1Bitmap*)subg->GetSharedBitmap();
+	delete subg;
+	return result;
+}
 void label1_OnMouseWheel(class Control* sender, MouseEventArgs e)
 {
 	sender->Text = StringHelper::Format(L"MouseWheel Delta=[%d]", e.Delta);
@@ -44,7 +129,7 @@ void bt2_OnMouseClick(class Control* sender, MouseEventArgs e)
 		if (file.Extension() == ".svg" || file.Extension() == ".SVG")
 		{
 			auto bytes = File::ReadAllBytes(ofd.SelectedPaths[0]);
-			picturebox1->Image = form->Image = form->Render->ToBitmapFromSvg((char*)bytes.data());
+			picturebox1->Image = form->Image = ToBitmapFromSvg((char*)bytes.data());
 			picturebox1->PostRender();
 		}
 		else
@@ -71,21 +156,21 @@ void iconButton_OnMouseClick(class Control* sender, MouseEventArgs e)
 DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 {
 
-	bmps[0] = this->Render->ToBitmapFromSvg(_0_ico);
-	bmps[1] = this->Render->ToBitmapFromSvg(_1_ico);
-	bmps[2] = this->Render->ToBitmapFromSvg(_2_ico);
-	bmps[3] = this->Render->ToBitmapFromSvg(_3_ico);
-	bmps[4] = this->Render->ToBitmapFromSvg(_4_ico);
-	bmps[5] = this->Render->ToBitmapFromSvg(_5_ico);
-	bmps[6] = this->Render->ToBitmapFromSvg(_6_ico);
-	bmps[7] = this->Render->ToBitmapFromSvg(_7_ico);
-	bmps[8] = this->Render->ToBitmapFromSvg(_8_ico);
-	bmps[9] = this->Render->ToBitmapFromSvg(_9_ico);
-	icos[0] = this->Render->ToBitmapFromSvg(icon0);
-	icos[1] = this->Render->ToBitmapFromSvg(icon1);
-	icos[2] = this->Render->ToBitmapFromSvg(icon2);
-	icos[3] = this->Render->ToBitmapFromSvg(icon3);
-	icos[4] = this->Render->ToBitmapFromSvg(icon4);
+	bmps[0] = ToBitmapFromSvg(_0_ico);
+	bmps[1] = ToBitmapFromSvg(_1_ico);
+	bmps[2] = ToBitmapFromSvg(_2_ico);
+	bmps[3] = ToBitmapFromSvg(_3_ico);
+	bmps[4] = ToBitmapFromSvg(_4_ico);
+	bmps[5] = ToBitmapFromSvg(_5_ico);
+	bmps[6] = ToBitmapFromSvg(_6_ico);
+	bmps[7] = ToBitmapFromSvg(_7_ico);
+	bmps[8] = ToBitmapFromSvg(_8_ico);
+	bmps[9] = ToBitmapFromSvg(_9_ico);
+	icos[0] = ToBitmapFromSvg(icon0);
+	icos[1] = ToBitmapFromSvg(icon1);
+	icos[2] = ToBitmapFromSvg(icon2);
+	icos[3] = ToBitmapFromSvg(icon3);
+	icos[4] = ToBitmapFromSvg(icon4);
 
 	label1 = this->AddControl(new Label(L"Label", 10, this->HeadHeight + 10));
 	label1->OnMouseWheel += label1_OnMouseWheel;
@@ -159,7 +244,7 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 			FileInfo file(Convert::wstring_to_string(files[0]));
 			if (file.Extension() == ".svg" || file.Extension() == ".SVG")
 			{
-				sender->Image = sender->ParentForm->Render->ToBitmapFromSvg((char*)File::ReadAllBytes(Convert::wstring_to_string(files[0]).c_str()).data());
+				sender->Image = ToBitmapFromSvg((char*)File::ReadAllBytes(Convert::wstring_to_string(files[0]).c_str()).data());
 				sender->PostRender();
 			}
 			else

@@ -338,13 +338,13 @@ bool Form::Update(bool force)
 		if (VisibleHead)
 		{
 			this->Render->FillRect(0, 0, this->Size.cx, this->HeadHeight, { 0.5f ,0.5f ,0.5f ,0.25f });
-			float headTextTop = (this->HeadHeight - this->Render->DefaultFontObject->FontHeight) * 0.5f;
+			float headTextTop = (this->HeadHeight - DefaultFontObject->FontHeight) * 0.5f;
 			if (headTextTop < 0.0f)
 				headTextTop = 0.0f;
 			this->Render->PushDrawRect(0, 0, this->Size.cx, this->HeadHeight);
 			if (this->CenterTitle)
 			{
-				auto tSize = this->Render->DefaultFontObject->GetTextSize(this->Text);
+				auto tSize = DefaultFontObject->GetTextSize(this->Text);
 				float textRangeWidth = this->Size.cx;
 				if (tSize.width > (this->Size.cx - (this->HeadHeight * 3)))
 				{

@@ -90,6 +90,9 @@
     <ClInclude Include="DemoWindow.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="nanosvg.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GUI\Control.cpp">
@@ -162,6 +165,9 @@
       <Filter>GUI</Filter>
     </ClCompile>
     <ClCompile Include="DemoWindow.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="nanosvg.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

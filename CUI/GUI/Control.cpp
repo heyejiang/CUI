@@ -5,6 +5,7 @@
 #pragma warning(disable: 4244)
 #pragma warning(disable: 4018)
 
+Font* DefaultFontObject = new Font(L"Arial", 18.0f);
 Control::Control()
 	:
 	Enable(true),
@@ -20,7 +21,7 @@ Control::Control()
 }
 Control::~Control()
 {
-	if (this->Font && this->Font != this->ParentForm->Render->DefaultFontObject)
+	if (this->Font)
 	{
 		delete this->Font;
 	}
@@ -45,7 +46,7 @@ GET_CPP(Control, class Font*, Font)
 {
 	if (this->_font)
 		return this->_font;
-	return this->ParentForm->Render->DefaultFontObject;
+	return DefaultFontObject;
 }
 SET_CPP(Control, class Font*, Font)
 {
