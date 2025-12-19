@@ -7,7 +7,7 @@ public:
 	virtual UIClass Type();
 	float Boder = 1.5f;
 	Panel();
-	Panel(int x, int y, int width = 120, int height = 24);
+	Panel(int x, int y, int width, int height);
 	void Update() override;
 	bool ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof) override;
 };

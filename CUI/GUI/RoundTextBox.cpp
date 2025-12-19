@@ -22,8 +22,7 @@ void RoundTextBox::Update()
 	auto size = ActualSize();
 	auto absRect = AbsRect;
 	bool isSelected = ParentForm->Selected == this;
-	// 默认：本帧不缓存光标区域（只有“选中且无选区”才会更新缓存）
-	this->_caretRectCacheValid = false;
+		this->_caretRectCacheValid = false;
 
 	d2d->PushDrawRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top);
 	{
@@ -44,8 +43,7 @@ void RoundTextBox::Update()
 				{
 					d2d->FillRect(sr.left + abslocation.x + TextMargin - OffsetX, (sr.top + abslocation.y) + OffsetY, sr.width, sr.height, this->SelectedBackColor);
 				}
-				// 光标区域缓存（用于 WM_TIMER 局部无效化）
-				if (selLen == 0 && !selRange.empty())
+								if (selLen == 0 && !selRange.empty())
 				{
 					const auto caret = selRange[0];
 					const float cx = caret.left + (float)abslocation.x + TextMargin - OffsetX;
@@ -78,8 +76,7 @@ void RoundTextBox::Update()
 		}
 		else if (isSelected)
 		{
-			// 空文本时也需要缓存光标区域
-			const float cx = (float)TextMargin + (float)abslocation.x - OffsetX;
+						const float cx = (float)TextMargin + (float)abslocation.x - OffsetX;
 			const float cy = (float)abslocation.y + OffsetY;
 			const float ch = (font->FontHeight > 16.0f) ? font->FontHeight : 16.0f;
 			this->_caretRectCache = { cx - 2.0f, cy - 2.0f, cx + 2.0f, cy + ch + 2.0f };

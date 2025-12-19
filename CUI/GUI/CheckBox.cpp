@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "CheckBox.h"
 #include "Form.h"
 UIClass CheckBox::Type() { return UIClass::UI_CheckBox; }
@@ -8,6 +8,7 @@ CheckBox::CheckBox(std::wstring text, int x, int y)
 	this->Text = text;
 	this->Location = POINT{ x,y };
 	this->BackColor = D2D1_COLOR_F{ 0.75f , 0.75f , 0.75f , 0.75f };
+	this->Cursor = CursorKind::Hand;
 }
 SIZE CheckBox::ActualSize()
 {

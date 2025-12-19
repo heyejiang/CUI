@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Control.h"
 #pragma comment(lib, "Imm32.lib")
 class ComboBox : public Control
@@ -10,6 +10,7 @@ private:
 	void UpdateScrollDrag(float posY);
 public:
 	virtual UIClass Type();
+	CursorKind QueryCursor(int xof, int yof) override;
 	D2D1_COLOR_F UnderMouseBackColor = Colors::SkyBlue;
 	D2D1_COLOR_F UnderMouseForeColor = Colors::White;
 	D2D1_COLOR_F ScrollBackColor = Colors::LightGray;

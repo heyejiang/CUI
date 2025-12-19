@@ -4,12 +4,24 @@
 #pragma comment(lib, "Imm32.lib")
 #define COMBO_MIN_SCROLL_BLOCK 16
 UIClass ComboBox::Type() { return UIClass::UI_ComboBox; }
+
+CursorKind ComboBox::QueryCursor(int xof, int yof)
+{
+	if (!this->Enable) return CursorKind::Arrow;
+
+		const bool hasVScroll = (this->Expand && this->values.Count > this->ExpandCount);
+	if (hasVScroll && xof >= (this->Width - 8) && yof >= this->Height)
+		return CursorKind::SizeNS;
+
+	return this->Cursor;
+}
 ComboBox::ComboBox(std::wstring text, int x, int y, int width, int height)
 {
 	this->Text = text;
 	this->Location = POINT{ x,y };
 	this->Size = SIZE{ width,height };
 	this->BackColor = D2D1_COLOR_F{ 0.75f , 0.75f , 0.75f , 0.75f };
+	this->Cursor = CursorKind::Hand;
 }
 SIZE ComboBox::ActualSize()
 {
@@ -269,13 +281,10 @@ bool ComboBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xo
 	{
 		if (WM_LBUTTONDOWN == message)
 		{
-			// 仅在“展开状态 + 鼠标在下拉区滚动条轨道”时才进入滚动拖拽
-			//（避免点击右侧下拉按钮/文本区时被误判为滚动条拖拽，导致无法展开/收起）
-			if (this->Expand && xof >= (Width - 8) && xof <= Width && yof >= this->Height)
+									if (this->Expand && xof >= (Width - 8) && xof <= Width && yof >= this->Height)
 			{
 				isDraggingScroll = true;
-				// 点击滚动条轨道时，立即定位到相对位置（和 GridView 一致）
-				UpdateScrollDrag((float)(yof - this->Height));
+								UpdateScrollDrag((float)(yof - this->Height));
 			}
 			this->ParentForm->Selected = this;
 		}

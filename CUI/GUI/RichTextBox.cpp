@@ -4,10 +4,22 @@
 #include <algorithm>
 #pragma comment(lib, "Imm32.lib")
 UIClass RichTextBox::Type() { return UIClass::UI_RichTextBox; }
+
+CursorKind RichTextBox::QueryCursor(int xof, int yof)
+{
+	(void)yof;
+	if (!this->Enable) return CursorKind::Arrow;
+
+		const float renderHeight = (float)this->Height - (this->TextMargin * 2.0f);
+	const bool hasVScroll = (renderHeight > 0.0f) && (this->textSize.height > renderHeight);
+	if (hasVScroll && xof >= (this->Width - 8))
+		return CursorKind::SizeNS;
+
+		return CursorKind::IBeam;
+}
 RichTextBox::RichTextBox(std::wstring text, int x, int y, int width, int height)
 {
-	// 用 Control::Text 初始化一次（保持外部一致），内部后续尽量走 buffer 避免整串复制
-	this->Text = text;
+		this->Text = text;
 	this->buffer = text;
 	this->bufferSyncedFromControl = true;
 	this->Location = POINT{ x,y };
@@ -70,12 +82,10 @@ void RichTextBox::UpdateLayout()
 		return;
 	SyncBufferFromControlIfNeeded();
 
-	// 选择是否进入虚拟化模式
-	this->virtualMode = (this->EnableVirtualization && this->AllowMultiLine && this->buffer.size() >= this->VirtualizeThreshold);
+		this->virtualMode = (this->EnableVirtualization && this->AllowMultiLine && this->buffer.size() >= this->VirtualizeThreshold);
 	if (this->virtualMode)
 	{
-		// 虚拟化模式下不使用单一 layOutCache
-		if (this->layOutCache)
+				if (this->layOutCache)
 		{
 			this->layOutCache->Release();
 			this->layOutCache = NULL;
@@ -84,27 +94,23 @@ void RichTextBox::UpdateLayout()
 		float renderWidth = this->Width - (TextMargin * 2.0f);
 		float renderHeight = this->Height - (TextMargin * 2.0f);
 
-		// 文本变化或控件尺寸变化：重建 blocks（仅切分，不立即为每块创建 layout）
-		if (this->TextChanged || this->lastLayoutSize.cx != this->Width || this->lastLayoutSize.cy != this->Height || this->blocksDirty)
+				if (this->TextChanged || this->lastLayoutSize.cx != this->Width || this->lastLayoutSize.cy != this->Height || this->blocksDirty)
 		{
 			RebuildBlocks();
 			this->lastLayoutSize = SIZE{ this->Width, this->Height };
 			this->TextChanged = false;
 		}
 
-		// 计算总高度/滚动条（按块 layout 的高度累加）
-		EnsureAllBlockMetrics(renderWidth, renderHeight);
+				EnsureAllBlockMetrics(renderWidth, renderHeight);
 		this->textSize.height = this->virtualTotalHeight;
 		this->textSize.width = renderWidth;
 		this->selRangeDirty = true;
 		return;
 	}
 
-	// 非虚拟化：使用单一 layout cache
-	ReleaseBlocks();
+		ReleaseBlocks();
 
-	// 文本变化或控件尺寸变化时重建 Layout（IDWriteTextLayout 不支持直接换文本）
-	if ((this->TextChanged || this->lastLayoutSize.cx != this->Width || this->lastLayoutSize.cy != this->Height) && this->ParentForm)
+		if ((this->TextChanged || this->lastLayoutSize.cx != this->Width || this->lastLayoutSize.cy != this->Height) && this->ParentForm)
 	{
 		if (this->layOutCache)this->layOutCache->Release();
 		auto d2d = this->ParentForm->Render;
@@ -114,8 +120,7 @@ void RichTextBox::UpdateLayout()
 			float render_width = this->Width - (TextMargin * 2.0f);
 			float render_height = this->Height - (TextMargin * 2.0f);
 
-			// 首次创建先不减滚动条宽度，算出高度后如需显示滚动条再复建一次（避免用旧 textSize 误判）
-			this->layOutCache = d2d->CreateStringLayout(this->buffer, render_width, render_height, font);
+						this->layOutCache = d2d->CreateStringLayout(this->buffer, render_width, render_height, font);
 			textSize = font->GetTextSize(layOutCache);
 			if (textSize.height > render_height)
 			{
@@ -166,8 +171,7 @@ void RichTextBox::RebuildBlocks()
 	while (i < n)
 	{
 		size_t len = std::min(blockSize, n - i);
-		// 避免把 UTF-16 surrogate pair 截断
-		if (i + len < n)
+				if (i + len < n)
 		{
 			wchar_t last = this->buffer[i + len - 1];
 			wchar_t next = this->buffer[i + len];
@@ -204,18 +208,15 @@ void RichTextBox::EnsureBlockLayout(int idx, float renderWidth, float renderHeig
 
 void RichTextBox::EnsureAllBlockMetrics(float renderWidth, float renderHeight)
 {
-	// 如果宽度变化或滚动条状态变化，需要重新算高度
-	if (!this->blockMetricsDirty && this->cachedRenderWidth == renderWidth)
+		if (!this->blockMetricsDirty && this->cachedRenderWidth == renderWidth)
 		return;
 
 	this->cachedRenderWidth = renderWidth;
 	this->virtualTotalHeight = 0.0f;
 	this->blockTops.resize(this->blocks.size());
 
-	// 先按“无滚动条宽度”计算；如果发现总高度超过视口，再按“减去 8px”重算一次
-	auto compute = [&](float w) {
-		// 释放旧 layout（宽度变了必须重建）
-		for (auto& b : this->blocks)
+		auto compute = [&](float w) {
+				for (auto& b : this->blocks)
 		{
 			if (b.layout)
 			{
@@ -259,8 +260,7 @@ int RichTextBox::HitTestGlobalIndex(float x, float y)
 	float contentY = (y + this->OffsetY) - this->TextMargin;
 	if (contentY < 0) contentY = 0;
 
-	// 找到所在 block
-	int idx = 0;
+		int idx = 0;
 	for (int i = 0; i < (int)this->blockTops.size(); i++)
 	{
 		if (contentY >= this->blockTops[i])
@@ -372,8 +372,7 @@ void RichTextBox::UpdateScrollDrag(float posY) {
 }
 void RichTextBox::SetScrollByPos(float yof)
 {
-	// yof: 控件局部坐标（与 ProcessMessage 传入一致）
-	const float renderHeight = this->Height - (TextMargin * 2.0f);
+		const float renderHeight = this->Height - (TextMargin * 2.0f);
 	if (renderHeight <= 0.0f || textSize.height <= 0.0f)
 	{
 		this->OffsetY = 0.0f;
@@ -388,13 +387,11 @@ void RichTextBox::SetScrollByPos(float yof)
 
 	const float maxScroll = std::max(0.0f, textSize.height - renderHeight);
 
-	// 计算滚动块高度：比例 = 可视高度 / 总高度
-	float scrollBlockHeight = (renderHeight / textSize.height) * renderHeight;
+		float scrollBlockHeight = (renderHeight / textSize.height) * renderHeight;
 	if (scrollBlockHeight < this->Height * 0.1f) scrollBlockHeight = this->Height * 0.1f;
 	if (scrollBlockHeight > this->Height) scrollBlockHeight = this->Height;
 
-	// 用“点击位置对应滚动块中心”来映射（与 GridView 行为一致）
-	const float topPosition = scrollBlockHeight * 0.5f;
+		const float topPosition = scrollBlockHeight * 0.5f;
 	const float bottomPosition = this->Height - topPosition;
 	if (bottomPosition > topPosition)
 	{
@@ -414,8 +411,7 @@ void RichTextBox::InputText(std::wstring input)
 	sels = std::clamp(sels, 0, (int)this->buffer.size());
 	sele = std::clamp(sele, 0, (int)this->buffer.size());
 
-	// 快路径：末尾插入（日志/持续输入场景）
-	if (sels == sele && sels == (int)this->buffer.size())
+		if (sels == sele && sels == (int)this->buffer.size())
 	{
 		this->buffer.append(input);
 		SelectionEnd = SelectionStart = (int)this->buffer.size();
@@ -495,10 +491,7 @@ void RichTextBox::InputDelete()
 }
 void RichTextBox::UpdateScroll(bool arrival)
 {
-	// 关键：滚动计算依赖最新的 layout/textSize。
-	// 如果此时刚输入（TextChanged=true），但还没进入下一帧 Update() 重建 layout，
-	// 那么使用旧 layOutCache 做 HitTest 会导致“末端换行/自动换行时无法滚到最底部”。
-	if (this->TextChanged || (this->virtualMode && (this->blocksDirty || this->blockMetricsDirty)) || (!this->virtualMode && this->layOutCache == NULL))
+				if (this->TextChanged || (this->virtualMode && (this->blocksDirty || this->blockMetricsDirty)) || (!this->virtualMode && this->layOutCache == NULL))
 	{
 		this->UpdateLayout();
 	}
@@ -511,8 +504,7 @@ void RichTextBox::UpdateScroll(bool arrival)
 			float render_height = this->Height - (TextMargin * 2.0f);
 			float caretTopContent = (cy - this->TextMargin) + this->OffsetY;
 			float caretBottomContent = caretTopContent + ch;
-			// arrival==true：用于“末端追加/换行”等场景，强制贴底（避免 caret HitTest 在尾部换行时返回偏小）
-			if (arrival && this->SelectionEnd >= (int)this->buffer.size())
+						if (arrival && this->SelectionEnd >= (int)this->buffer.size())
 			{
 				const float maxScroll = std::max(0.0f, this->textSize.height - render_height);
 				this->OffsetY = maxScroll;
@@ -536,8 +528,7 @@ void RichTextBox::UpdateScroll(bool arrival)
 	if (selected.size() > 0)
 	{
 		auto lastSelect = selected[0];
-		// arrival==true：末端输入/追加时强制贴底，更符合“聊天/日志”预期
-		if (arrival && this->SelectionEnd >= (int)this->buffer.size())
+				if (arrival && this->SelectionEnd >= (int)this->buffer.size())
 		{
 			const float maxScroll = std::max(0.0f, this->textSize.height - render_height);
 			OffsetY = maxScroll;
@@ -590,8 +581,7 @@ void RichTextBox::Update()
 	auto size = this->ActualSize();
 	auto absRect = this->AbsRect;
 	bool isSelected = this->ParentForm->Selected == this;
-	// 默认：本帧不缓存光标区域（只有“选中且无选区”才会更新缓存）
-	this->_caretRectCacheValid = false;
+		this->_caretRectCacheValid = false;
 
 	d2d->PushDrawRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top);
 	{
@@ -605,8 +595,7 @@ void RichTextBox::Update()
 			auto font = this->Font;
 			if (this->virtualMode)
 			{
-				// 只绘制可视 blocks
-				float renderWidth = this->Width - (TextMargin * 2.0f);
+								float renderWidth = this->Width - (TextMargin * 2.0f);
 				float renderHeight = this->Height - (TextMargin * 2.0f);
 				if (this->layoutWidthHasScrollBar) renderWidth -= 8.0f;
 
@@ -614,13 +603,11 @@ void RichTextBox::Update()
 				int sele = std::max(SelectionStart, SelectionEnd);
 				int selLen = sele - sels;
 
-				// caret
-				float cx, cy, ch;
+								float cx, cy, ch;
 				if (isSelected && selLen == 0 && GetCaretMetrics(this->SelectionEnd, cx, cy, ch))
 				{
 					selectedPos = { (int)(cx), (int)(cy) };
-					// 光标区域缓存（用于 WM_TIMER 局部无效化）
-					{
+										{
 						const float ax = (float)abslocation.x + cx;
 						const float ay = (float)abslocation.y + cy;
 						const float ah = (ch > 0.0f) ? ch : font->FontHeight;
@@ -633,12 +620,10 @@ void RichTextBox::Update()
 						Colors::Black);
 				}
 
-				// 计算可视范围
-				float viewTop = this->OffsetY;
+								float viewTop = this->OffsetY;
 				float viewBottom = this->OffsetY + renderHeight;
 
-				// 找到第一个可视 block
-				int first = 0;
+								int first = 0;
 				for (int i = 0; i < (int)this->blockTops.size(); i++)
 				{
 					if (this->blockTops[i] + this->blocks[i].height >= viewTop)
@@ -658,8 +643,7 @@ void RichTextBox::Update()
 					float drawY = ((float)abslocation.y + TextMargin) + (top - this->OffsetY);
 					float drawX = (float)abslocation.x + TextMargin;
 
-					// selection rects (per block)
-					if (isSelected && selLen != 0)
+										if (isSelected && selLen != 0)
 					{
 						int blockStart = (int)this->blocks[i].start;
 						int blockEnd = (int)(this->blocks[i].start + this->blocks[i].len);
@@ -745,8 +729,7 @@ void RichTextBox::Update()
 		{
 			if (isSelected)
 			{
-				// 空文本时也需要缓存光标区域
-				const float ax = (float)TextMargin + (float)abslocation.x;
+								const float ax = (float)TextMargin + (float)abslocation.x;
 				const float ay = (float)abslocation.y;
 				const float ah = (font->FontHeight > 16.0f) ? font->FontHeight : 16.0f;
 				this->_caretRectCache = { ax - 2.0f, ay - 2.0f, ax + 2.0f, ay + ah + 2.0f };
@@ -861,8 +844,7 @@ bool RichTextBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int
 			}
 			if (xof >= Width - 8 && xof <= Width)
 			{
-				// 点击滚动条轨道：立即定位到相对位置（无需先拖拽）
-				this->SetScrollByPos((float)yof);
+								this->SetScrollByPos((float)yof);
 				isDraggingScroll = true;
 				this->PostRender();
 			}
@@ -1100,15 +1082,13 @@ bool RichTextBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int
 		{
 			const wchar_t c[] = { ch,L'\0' };
 			this->InputText(c);
-			// 输入发生后，滚动需要使用“最新布局”才能正确跟随末端换行/自动换行
-			UpdateScroll(this->SelectionEnd >= (int)this->buffer.size());
+						UpdateScroll(this->SelectionEnd >= (int)this->buffer.size());
 		}
 		else if (ch == 13 && this->AllowMultiLine)
 		{
 			const wchar_t c[] = { L'\n',L'\0' };
 			this->InputText(c);
-			// 回车换行：按“贴底”逻辑滚动到最底部
-			UpdateScroll(true);
+						UpdateScroll(true);
 		}
 		else if (ch == 1)
 		{

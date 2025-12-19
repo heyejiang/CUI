@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "TabControl.h"
 #include "Panel.h"
 #include "Form.h"
@@ -24,7 +24,21 @@ TabPage* TabControl::AddPage(std::wstring name)
 {
 	TabPage* result = this->AddControl(new TabPage(name));
 	result->BackColor = this->BackColor;
+		result->Location = POINT{ 0, this->TitleHeight };
+	result->Size = this->Size;
+	for (int i = 0; i < this->Count; i++)
+	{
+		this->operator[](i)->Visible = (this->SelectIndex == i);
+	}
 	return result;
+}
+GET_CPP(TabControl, int, PageCount)
+{
+	return this->Count;
+}
+GET_CPP(TabControl, List<Control*>&, Pages)
+{
+	return this->Children;
 }
 void TabControl::Update()
 {

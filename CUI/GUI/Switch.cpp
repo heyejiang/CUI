@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Switch.h"
 #include "Form.h"
 #pragma comment(lib, "Imm32.lib")
@@ -10,6 +10,7 @@ Switch::Switch(int x, int y, int width, int height)
 	auto bc = this->BackColor;
 	bc.a = 0.0f;
 	this->BackColor = bc;
+	this->Cursor = CursorKind::Hand;
 }
 void Switch::Update()
 {

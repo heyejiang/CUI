@@ -45,12 +45,10 @@ ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics* g, const char* data) {
 			switch (paint.type) {
 			case NSVG_PAINT_NONE: {
 				return NULL;
-			}
-								break;
+			}break;
 			case NSVG_PAINT_COLOR: {
 				return g->CreateSolidColorBrush(ic2fc(paint.color, opacity));
-			}
-								 break;
+			}break;
 			case NSVG_PAINT_LINEAR_GRADIENT: {
 				std::vector<D2D1_GRADIENT_STOP> cols;
 				for (int i = 0; i < paint.gradient->nstops; i++) {
@@ -58,8 +56,7 @@ ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics* g, const char* data) {
 					cols.push_back({ stop.offset, ic2fc(stop.color, opacity) });
 				}
 				return g->CreateLinearGradientBrush(cols.data(), cols.size());
-			}
-										   break;
+			}break;
 			case NSVG_PAINT_RADIAL_GRADIENT: {
 				std::vector<D2D1_GRADIENT_STOP> cols;
 				for (int i = 0; i < paint.gradient->nstops; i++) {
@@ -67,8 +64,7 @@ ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics* g, const char* data) {
 					cols.push_back({ stop.offset, ic2fc(stop.color, opacity) });
 				}
 				return g->CreateRadialGradientBrush(cols.data(), cols.size(), { paint.gradient->fx,paint.gradient->fy });
-			}
-										   break;
+			} break;
 			}
 			return NULL;
 			};
@@ -94,78 +90,107 @@ ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics* g, const char* data) {
 
 	return result;
 }
-void label1_OnMouseWheel(class Control* sender, MouseEventArgs e)
+void DemoWindow::label1_OnMouseWheel(class Control* sender, MouseEventArgs e)
 {
-	sender->Text = StringHelper::Format(L"MouseWheel Delta=[%d]", e.Delta);
-	sender->PostRender();
+	this->label1->Text = StringHelper::Format(L"MouseWheel Delta=[%d]", e.Delta);
+	this->label1->PostRender();
 }
-void button1_OnMouseClick(class Control* sender, MouseEventArgs e)
+
+void DemoWindow::button1_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
 	sender->Text = StringHelper::Format(L"独立Tag计数[%d]", sender->Tag++);
 	sender->PostRender();
 }
-void radiobox1_OnChecked(class Control* sender)
+
+void DemoWindow::radiobox1_OnChecked(class Control* sender)
 {
-	((DemoWindow*)sender->ParentForm)->radiobox2->Checked = false;
-	((DemoWindow*)sender->ParentForm)->radiobox2->PostRender();
+	this->radiobox2->Checked = false;
+	this->radiobox2->PostRender();
 }
-void radiobox2_OnChecked(class Control* sender)
+
+void DemoWindow::radiobox2_OnChecked(class Control* sender)
 {
-	((DemoWindow*)sender->ParentForm)->radiobox1->Checked = false;
-	((DemoWindow*)sender->ParentForm)->radiobox1->PostRender();
+	this->radiobox1->Checked = false;
+	this->radiobox1->PostRender();
 }
-void bt2_OnMouseClick(class Control* sender, MouseEventArgs e)
+
+void DemoWindow::bt2_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
-	DemoWindow* form = ((DemoWindow*)sender->ParentForm);
-	PictureBox* picturebox1 = form->picturebox1;
+	PictureBox* picturebox1 = this->picturebox1;
 	OpenFileDialog ofd;
 
 	ofd.Filter = MakeDialogFilterStrring("图片文件", "*.jpg;*.png;*.bmp;*.svg;*.webp");
 	ofd.SupportMultiDottedExtensions = true;
 	ofd.Title = "选择一个图片文件";
-	if (ofd.ShowDialog(form->Handle) == DialogResult::OK)
+	if (ofd.ShowDialog(this->Handle) == DialogResult::OK)
 	{
 		if (picturebox1->Image)
 		{
 			picturebox1->Image->Release();
 		}
-		if (form->Image && form->Image != picturebox1->Image)
+		if (this->Image && this->Image != picturebox1->Image)
 		{
-			form->Image->Release();
+			this->Image->Release();
 		}
 		FileInfo file(ofd.SelectedPaths[0]);
 		if (file.Extension() == ".svg" || file.Extension() == ".SVG")
 		{
 			auto bytes = File::ReadAllBytes(ofd.SelectedPaths[0]);
-			picturebox1->Image = form->Image = ToBitmapFromSvg(form->Render,(char*)bytes.data());
+			picturebox1->Image = this->Image = ToBitmapFromSvg(this->Render, (char*)bytes.data());
 			picturebox1->PostRender();
 		}
 		else
 		{
 			auto bytes = File::ReadAllBytes(ofd.SelectedPaths[0]);
 			auto img = BitmapSource::FromBuffer(bytes.data(), bytes.size());
-			picturebox1->Image = form->Image = form->Render->CreateBitmap(img->GetWicBitmap());
+			picturebox1->Image = this->Image = this->Render->CreateBitmap(img->GetWicBitmap());
 			picturebox1->PostRender();
 		}
-		form->Invalidate();
+		this->Invalidate();
 	}
 }
-void sw1_OnMouseClick(class Control* sender, MouseEventArgs e)
+
+void DemoWindow::sw1_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
 	Switch* sw = (Switch*)sender;
-	((DemoWindow*)sender->ParentForm)->gridview1->Enable = sw->Checked;
+	this->gridview1->Enable = sw->Checked;
 }
-void sw2_OnMouseClick(class Control* sender, MouseEventArgs e)
+
+void DemoWindow::sw2_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
 	Switch* sw = (Switch*)sender;
-	((DemoWindow*)sender->ParentForm)->gridview1->Visible = sw->Checked;
+	this->gridview1->Visible = sw->Checked;
 }
-void iconButton_OnMouseClick(class Control* sender, MouseEventArgs e)
+
+void DemoWindow::iconButton_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
+	(void)sender;
+	(void)e;
+}
+
+void DemoWindow::picturebox1_OnDropFile(class Control* sender, List<std::wstring> files)
+{
+	if (sender->Image)
+	{
+		sender->Image->Release();
+		sender->Image = NULL;
+	}
+	FileInfo file(Convert::wstring_to_string(files[0]));
+	if (file.Extension() == ".svg" || file.Extension() == ".SVG")
+	{
+		sender->Image = ToBitmapFromSvg(this->Render, (char*)File::ReadAllBytes(Convert::wstring_to_string(files[0]).c_str()).data());
+		sender->PostRender();
+	}
+	else
+	{
+		auto img = BitmapSource::FromFile(files[0]);
+		sender->Image = sender->ParentForm->Render->CreateBitmap(img->GetWicBitmap());
+		sender->PostRender();
+	}
 }
 DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 {
-	bmps[0] = ToBitmapFromSvg(this->Render,_0_ico);
+	bmps[0] = ToBitmapFromSvg(this->Render, _0_ico);
 	bmps[1] = ToBitmapFromSvg(this->Render, _1_ico);
 	bmps[2] = ToBitmapFromSvg(this->Render, _2_ico);
 	bmps[3] = ToBitmapFromSvg(this->Render, _3_ico);
@@ -182,26 +207,26 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 	icos[4] = ToBitmapFromSvg(this->Render, icon4);
 
 	label1 = this->AddControl(new Label(L"Label", 10, 10));
-	label1->OnMouseWheel += label1_OnMouseWheel;
+	label1->OnMouseWheel += std::bind_front(&DemoWindow::label1_OnMouseWheel, this);
+
 	clabel1 = this->AddControl(new CustomLabel1(L"Custom Label", 400, 10));
 	button1 = this->AddControl(new Button(L"BUTTON1", 10, this->LastChild()->Bottom + 5, 120, 24));
-	button1->OnMouseClick += button1_OnMouseClick;
+	button1->OnMouseClick += std::bind_front(&DemoWindow::button1_OnMouseClick, this);
 	textbox0 = this->AddControl(new TextBox(L"TextBox", 10, this->LastChild()->Bottom + 5, 120, 20));
 	textbox1 = this->AddControl(new CustomTextBox1(L"Custom TextBox", 10, this->LastChild()->Bottom + 5, 120, 20));
 	textbox3 = this->AddControl(new RoundTextBox(L"RoundTextBox", 10, this->LastChild()->Bottom + 5, 120, 20));
 	pwdbox1 = this->AddControl(new PasswordBox(L"pwd", 10, this->LastChild()->Bottom + 5, 120, 20));
 	combobox1 = this->AddControl(new ComboBox(L"item1", 10, this->LastChild()->Bottom + 5, 120, 24));
 	combobox1->ExpandCount = 8;
-	for (int i = 0; i < 100; i++)
-	{
+	for (int i = 0; i < 100; i++) {
 		combobox1->values.Add(StringHelper::Format(L"item%d", i));
 	}
 	checkbox1 = this->AddControl(new CheckBox(L"CheckBox", combobox1->Right + 5, button1->Top));
 	radiobox1 = this->AddControl(new RadioBox(L"RadioBox1", combobox1->Right + 5, this->LastChild()->Bottom + 5));
 	radiobox1->Checked = true;
 	radiobox2 = this->AddControl(new RadioBox(L"RadioBox2", combobox1->Right + 5, this->LastChild()->Bottom + 5));
-	radiobox1->OnChecked += radiobox1_OnChecked;
-	radiobox2->OnChecked += radiobox2_OnChecked;
+	radiobox1->OnChecked += std::bind_front(&DemoWindow::radiobox1_OnChecked, this);
+	radiobox2->OnChecked += std::bind_front(&DemoWindow::radiobox2_OnChecked, this);
 
 	textbox2 = this->AddControl(new RichTextBox(L"RichTextBox", 260, button1->Top, 800, 160));
 	textbox2->BackColor = D2D1_COLOR_F{ 1,1,1,0.25f };
@@ -217,25 +242,22 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 	tabControl1->get(0)->AddControl(new Label(L"基本容器", 10, 10));
 
 	bt2 = tabControl1->get(0)->AddControl(new Button(L"打开图片", 120, 10, 120, 24));
-	bt2->OnMouseClick += bt2_OnMouseClick;
+	bt2->OnMouseClick += std::bind_front(&DemoWindow::bt2_OnMouseClick, this);
 	panel1 = tabControl1->get(0)->AddControl(new Panel(10, 40, 400, 200));
 
 	TreeView* tree = tabControl1->get(0)->AddControl(new TreeView(420, 10, 360, 230));
 	tree->Font = new Font(L"宋体", 24);
 	tree->BackColor = D2D1_COLOR_F{ 1,1,1,0.25f };
-	for (int i = 0; i < 3; i++)
-	{
+	for (int i = 0; i < 3; i++) {
 		auto sub = new TreeNode(StringHelper::Format(L"item%d", i), bmps[1]);
 		sub->Expand = true;
 		tree->Root->Children.push_back(sub);
 		sub->Tag = i;
-		for (int j = 0; j < 3; j++)
-		{
+		for (int j = 0; j < 3; j++) {
 			auto ssub = new TreeNode(StringHelper::Format(L"item%d-%d", i, j), bmps[2]);
 			sub->Children.push_back(ssub);
 			ssub->Tag = i * j;
-			for (int n = 0; n < 10; n++)
-			{
+			for (int n = 0; n < 10; n++) {
 				auto sssub = new TreeNode(StringHelper::Format(L"item%d-%d-%d", i, j, n), bmps[3]);
 				ssub->Children.push_back(sssub);
 				sssub->Tag = i * j * n;
@@ -247,35 +269,28 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 	picturebox1 = panel1->AddControl(new PictureBox(120, 10, 260, 120));
 	picturebox1->Image = this->Image;
 	picturebox1->SizeMode = ImageSizeMode::StretchIamge;
-	picturebox1->OnDropFile += [&](class Control* sender, List<std::wstring> files)
-		{
-			if (sender->Image)
-			{
-				sender->Image->Release();
-				sender->Image = NULL;
-			}
-			FileInfo file(Convert::wstring_to_string(files[0]));
-			if (file.Extension() == ".svg" || file.Extension() == ".SVG")
-			{
-				sender->Image = ToBitmapFromSvg(this->Render, (char*)File::ReadAllBytes(Convert::wstring_to_string(files[0]).c_str()).data());
-				sender->PostRender();
-			}
-			else
-			{
-				auto img = BitmapSource::FromFile(files[0]);
-				sender->Image = sender->ParentForm->Render->CreateBitmap(img->GetWicBitmap());
-				sender->PostRender();
-			}
-		};
+	picturebox1->OnDropFile += std::bind_front(&DemoWindow::picturebox1_OnDropFile, this);
 	panel1->AddControl(new Label(L"Progress Bar", 10, picturebox1->Bottom + 5));
 	progressbar1 = panel1->AddControl(new ProgressBar(120, picturebox1->Bottom + 5, 260, 24));
 	gridview1 = tabControl1->get(1)->AddControl(new GridView(10, 10, 1000, 200));
 	gridview1->HeadFont = new Font(L"Arial", 16);
 	gridview1->BackColor = D2D1_COLOR_F{ 0,0,0,0 };
 	gridview1->Font = new Font(L"Arial", 16);
+
+		GridViewColumn textColumn = GridViewColumn(L"Text", 100, ColumnType::Text, false);
+	textColumn.SetSortFunc([](const CellValue& lhs, const CellValue& rhs) -> int {
+		wchar_t* end1 = nullptr;
+		wchar_t* end2 = nullptr;
+		long long a = wcstoll(lhs.Text.c_str(), &end1, 10);
+		long long b = wcstoll(rhs.Text.c_str(), &end2, 10);
+		if (end1 == lhs.Text.c_str()) a = 0;
+		if (end2 == rhs.Text.c_str()) b = 0;
+		if (a == b) return 0;
+		return (a < b) ? -1 : 1;
+	});
 	gridview1->Columns.Add(GridViewColumn(L"Image", 80, ColumnType::Image));
 	gridview1->Columns.Add(GridViewColumn(L"Check", 80, ColumnType::Check));
-	gridview1->Columns.Add(GridViewColumn(L"Text", 100, ColumnType::Text, false));
+	gridview1->Columns.Add(textColumn);
 	gridview1->Columns.Add(GridViewColumn(L"Check", 80, ColumnType::Check));
 	gridview1->Columns.Add(GridViewColumn(L"Edit", 200, ColumnType::Text, true));
 	for (int i = 0; i < 100; i++)
@@ -284,13 +299,14 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 		row.Cells = { bmps[i % 10] ,i % 2 == 0,std::to_wstring(Random::Next()) ,i % 3 == 0 ,std::to_wstring(Random::Next()) };
 		gridview1->Rows.Add(row);
 	}
+
 	sw1 = tabControl1->get(1)->AddControl(new Switch(gridview1->Right + 5, 10));
 	sw1->Checked = gridview1->Visible;
-	sw1->OnMouseClick += sw1_OnMouseClick;
+	sw1->OnMouseClick += std::bind_front(&DemoWindow::sw1_OnMouseClick, this);
 
 	sw2 = tabControl1->get(1)->AddControl(new Switch(gridview1->Right + 5, 42));
 	sw2->Checked = gridview1->Visible;
-	sw2->OnMouseClick += sw2_OnMouseClick;
+	sw2->OnMouseClick += std::bind_front(&DemoWindow::sw2_OnMouseClick, this);
 	for (int i = 0; i < 5; i++)
 	{
 		Button* ingButton = tabControl1->get(2)->AddControl(new Button(L"", 10 + (44 * i), 10, 40, 40));
@@ -298,9 +314,69 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,600 })
 		ingButton->SizeMode = ImageSizeMode::CenterImage;
 		ingButton->BackColor = D2D1_COLOR_F{ 0,0,0,0 };
 		ingButton->Boder = 2.0f;
-		ingButton->OnMouseClick += iconButton_OnMouseClick;
+		ingButton->OnMouseClick += std::bind_front(&DemoWindow::iconButton_OnMouseClick, this);
 	}
 
 	this->BackColor = Colors::grey31;
 	this->SizeMode = ImageSizeMode::StretchIamge;
 }
+
+NotifyIcon* TestNotifyIcon(HWND handle)
+{
+	NotifyIcon* notifyIcon = new NotifyIcon();
+	notifyIcon->InitNotifyIcon(handle, 1);
+	notifyIcon->SetIcon(LoadIcon(NULL, IDI_APPLICATION));
+	notifyIcon->SetToolTip(Convert::Utf8ToAnsi("应用程序").c_str());
+	notifyIcon->ShowNotifyIcon();
+
+	notifyIcon->AddMenuItem(NotifyIconMenuItem(Convert::Utf8ToAnsi("打开主窗口").c_str(), 1));
+
+
+	NotifyIconMenuItem settingsMenu(Convert::Utf8ToAnsi("设置").c_str(), 2);
+	settingsMenu.AddSubItem(NotifyIconMenuItem(Convert::Utf8ToAnsi("音频设置").c_str(), 21));
+	settingsMenu.AddSubItem(NotifyIconMenuItem(Convert::Utf8ToAnsi("显示设置").c_str(), 22));
+	settingsMenu.AddSubItem(NotifyIconMenuItem::CreateSeparator());
+	settingsMenu.AddSubItem(NotifyIconMenuItem(Convert::Utf8ToAnsi("高级设置").c_str(), 23));
+
+	notifyIcon->AddMenuItem(settingsMenu);
+
+	notifyIcon->AddMenuSeparator();
+	notifyIcon->AddMenuItem(NotifyIconMenuItem(Convert::Utf8ToAnsi("退出").c_str(), 3));
+
+
+	notifyIcon->OnNotifyIconMenuClick += [&](NotifyIcon* sender, int menuId) {
+		switch (menuId) {
+		case 1:
+			ShowWindow(sender->hWnd, SW_SHOWNORMAL);
+			break;
+		case 21:
+			break;
+		case 22:
+			break;
+		case 23:
+			break;
+		case 3:
+			PostMessage(sender->hWnd, WM_CLOSE, 0, 0);
+			break;
+		}
+		};
+
+	return notifyIcon;
+}
+/*
+sample:
+#pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
+int main() {
+	auto form = DemoWindow();
+	form.Show();
+	NotifyIcon* notifyIcon = TestNotifyIcon(form.Handle);
+	int index = 0;
+	while (1) {
+		Form::DoEvent();
+		if (Application::Forms.size() == 0)
+			break;
+	}
+	notifyIcon->HideNotifyIcon();
+	return 0;
+}
+*/

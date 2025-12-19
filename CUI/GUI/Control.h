@@ -5,11 +5,10 @@
 #include <CppUtils/Graphics/Graphics.h>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 struct ID2D1Bitmap;
 
-// 默认字体：全局共享对象，不归任何 Control 实例所有
-// 注意：返回的指针生命周期贯穿进程全程，严禁 delete
 inline Font* GetDefaultFontObject()
 {
 	static Font defaultFont(L"Arial", 18.0f);
@@ -43,6 +42,19 @@ enum class UIClass : int
 	UI_TabControl,
 	UI_Switch,
 	UI_CUSTOM
+};
+
+enum class CursorKind : uint8_t
+{
+	Arrow,
+	Hand,
+	IBeam,
+	SizeWE,
+	SizeNS,
+	SizeNWSE,
+	SizeNESW,
+	SizeAll,
+	No
 };
 
 typedef Event<void(class Control*, EventArgs)> EventHandler;
@@ -82,7 +94,6 @@ private:
 	D2D1_COLOR_F _boldercolor = Colors::Black;
 	ID2D1Bitmap* _image = NULL;
 	std::wstring _text;
-	List<Control*> Children;
 	Font* _font = NULL;
 public:
 	CheckedEvent OnChecked;
@@ -115,21 +126,14 @@ public:
 	bool Visible;
 	bool Checked;
 	UINT64 Tag;
+	List<Control*> Children;
 	ImageSizeMode SizeMode = ImageSizeMode::Zoom;
 	Control();
 	~Control();
 	virtual UIClass Type();
 	virtual void Update();
 	virtual void PostRender();
-	// 返回控件期望的“连续重绘”间隔（毫秒）。
-	// - 0 表示不需要持续刷新（仅在 Invalidate/PostRender 时绘制）
-	// - 非 0 表示控件存在动画/实时内容/光标闪烁等需求（如媒体播放器、进度动画、输入光标）
-	// Form 会汇总所有可视控件的最小值并用 WM_TIMER 驱动刷新。
 	virtual int DesiredFrameIntervalMs() { return 0; }
-	// 返回控件“持续刷新”时的最小无效区域（控件坐标系：与 AbsRect 一致，不包含标题栏 ClientTop 偏移）。
-	// 用于输入光标闪烁等场景：避免每一帧都把整个控件区域标脏。
-	// - 返回 true：outRect 有效，Form 会只无效化该区域
-	// - 返回 false：Form 回退为无效化整个控件区域（AbsRect）
 	virtual bool GetAnimatedInvalidRect(D2D1_RECT_F& outRect) { (void)outRect; return false; }
 	PROPERTY(class Font*, Font);
 	GET(class Font*, Font);
@@ -197,6 +201,9 @@ public:
 	PROPERTY(ID2D1Bitmap*, Image);
 	GET(ID2D1Bitmap*, Image);
 	SET(ID2D1Bitmap*, Image);
+
+		CursorKind Cursor = CursorKind::Arrow;
+		virtual CursorKind QueryCursor(int xof, int yof) { (void)xof; (void)yof; return this->Cursor; }
 	virtual void RenderImage();
 	virtual SIZE ActualSize();
 	void setTextPrivate(std::wstring);

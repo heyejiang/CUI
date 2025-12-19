@@ -20,6 +20,7 @@ private:
 	void DrawScroll();
 public:
 	virtual UIClass Type();
+	CursorKind QueryCursor(int xof, int yof) override;
 	TreeNode* Root = NULL;
 	TreeNode* SelectedNode = NULL;
 	TreeNode* HoveredNode = NULL;

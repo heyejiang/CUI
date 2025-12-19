@@ -1,5 +1,6 @@
 #pragma once
 #include "Control.h"
+#include <functional>
 #pragma comment(lib, "Imm32.lib")
 typedef Event<void(class GridView*, int c, int r, bool v) > OnGridViewCheckStateChangedEvent;
 enum class ColumnType
@@ -8,6 +9,8 @@ enum class ColumnType
 	Image,
 	Check,
 };
+
+class CellValue;
 class GridViewColumn
 {
 public:
@@ -15,7 +18,12 @@ public:
 	float Width = 120;
 	ColumnType Type = ColumnType::Text;
 	bool CanEdit = true;
+		std::function<int(const CellValue& lhs, const CellValue& rhs)> SortFunc = nullptr;
 	GridViewColumn(std::wstring name = L"", float width = 120.0F, ColumnType type = ColumnType::Text, bool canEdit = false);
+	void SetSortFunc(std::function<int(const CellValue& lhs, const CellValue& rhs)> func)
+	{
+		SortFunc = std::move(func);
+	}
 };
 class CellValue
 {
@@ -44,14 +52,15 @@ class GridView : public Control
 {
 public:
 	UIClass Type();
+	CursorKind QueryCursor(int xof, int yof) override;
 	GridView(int x = 0, int y = 0, int width = 120, int height = 20);
-	// 编辑态光标闪烁需要周期刷新（媒体播放器等实时控件也可用同机制）
-	int DesiredFrameIntervalMs() override
+		int DesiredFrameIntervalMs() override
 	{
 		return (this->Editing && this->IsSelected()) ? 100 : 0;
 	}
 	class Font* HeadFont = NULL;
-	bool InScroll = false;
+		bool InScroll = false;
+		bool InHScroll = false;
 	ScrollChangedEvent ScrollChanged;
 	List<GridViewColumn> Columns = List<GridViewColumn>();
 	List<GridViewRow> Rows = List<GridViewRow>();
@@ -64,6 +73,8 @@ public:
 	int ScrollRowPosition = 0;
 	int SelectedColumnIndex = -1;
 	int SelectedRowIndex = -1;
+	int SortedColumnIndex = -1;
+	bool SortAscending = true;
 	int UnderMouseColumnIndex = -1;
 	int UnderMouseRowIndex = -1;
 	D2D1_COLOR_F ButtonBackColor = Colors::GhostWhite;
@@ -81,17 +92,38 @@ public:
 	float EditTextMargin = 3.0f;
 	OnGridViewCheckStateChangedEvent OnGridViewCheckStateChanged;
 	SelectionChangedEvent SelectionChanged;
+		float ScrollXOffset = 0.0f;
 	GridViewRow& SelectedRow();
 	std::wstring& SelectedValue();
 	void Clear();
 	void ChangeEditionSelected(int col, int row);
 	void ReSizeRows(int count);
+		void SortByColumn(int col, bool ascending = true);
 private:
+	struct ScrollLayout
+	{
+		bool NeedV = false;
+		bool NeedH = false;
+		float ScrollBarSize = 8.0f;
+		float RenderWidth = 0.0f;   		float RenderHeight = 0.0f;  		float HeadHeight = 0.0f;
+		float RowHeight = 0.0f;
+		float TotalColumnsWidth = 0.0f;
+		int VisibleRows = 0;
+		int MaxScrollRow = 0;
+		float MaxScrollX = 0.0f;
+	};
+	ScrollLayout CalcScrollLayout();
+	float GetTotalColumnsWidth();
 	POINT GetGridViewUnderMouseItem(int x, int y, GridView* ct);
+	int HitTestHeaderColumn(int x, int y);
+			int HitTestHeaderDivider(int x, int y);
 	D2D1_RECT_F GetGridViewScrollBlockRect(GridView* ct);
 	int GetGridViewRenderRowCount(GridView* ct);
 	void DrawScroll();
+	void DrawHScroll(const ScrollLayout& l);
+	void DrawCorner(const ScrollLayout& l);
 	void SetScrollByPos(float yof);
+	void SetHScrollByPos(float xof);
 	void HandleDropFiles(WPARAM wParam);
 	void HandleMouseWheel(WPARAM wParam, int xof, int yof);
 	void HandleMouseMove(int xof, int yof);
@@ -110,8 +142,13 @@ private:
 	bool CanScrollDown();
 	void UpdateUnderMouseIndices(int xof, int yof);
 
-	// 内建编辑器状态（替代嵌入 TextBox）
-	bool Editing = false;
+		bool _resizingColumn = false;
+	int _resizeColumnIndex = -1;
+	float _resizeStartX = 0.0f;
+	float _resizeStartWidth = 0.0f;
+	float _minColumnWidth = 24.0f;
+
+		bool Editing = false;
 	int EditingColumnIndex = -1;
 	int EditingRowIndex = -1;
 	std::wstring EditingText;

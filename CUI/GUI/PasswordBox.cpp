@@ -168,12 +168,10 @@ void PasswordBox::Update()
 	auto size = this->ActualSize();
 	auto absRect = this->AbsRect;
 	bool isSelected = this->ParentForm->Selected == this;
-	// 默认：本帧不缓存光标区域（只有“选中且无选区”才会更新缓存）
-	this->_caretRectCacheValid = false;
+		this->_caretRectCacheValid = false;
 	d2d->PushDrawRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top);
 	{
-		// MaskText 已在上面构造，避免重复分配
-		d2d->FillRect(abslocation.x, abslocation.y, size.cx, size.cy, isSelected ? this->FocusedColor : this->BackColor);
+				d2d->FillRect(abslocation.x, abslocation.y, size.cx, size.cy, isSelected ? this->FocusedColor : this->BackColor);
 		if (this->Image)
 		{
 			this->RenderImage();
@@ -191,14 +189,12 @@ void PasswordBox::Update()
 				{
 					for (auto sr : selRange)
 					{
-						// 选区 Y 偏移与 TextBox 保持一致：+OffsetY
-						d2d->FillRect(sr.left + abslocation.x + TextMargin - OffsetX, (sr.top + abslocation.y) + OffsetY, sr.width, sr.height, this->SelectedBackColor);
+												d2d->FillRect(sr.left + abslocation.x + TextMargin - OffsetX, (sr.top + abslocation.y) + OffsetY, sr.width, sr.height, this->SelectedBackColor);
 					}
 				}
 				else
 				{
-					// 光标区域缓存（用于 WM_TIMER 局部无效化）
-					if (!selRange.empty())
+										if (!selRange.empty())
 					{
 						const auto caret = selRange[0];
 						const float cx = caret.left + (float)abslocation.x + TextMargin - OffsetX;
@@ -234,8 +230,7 @@ void PasswordBox::Update()
 		{
 			if (isSelected)
 			{
-				// 空文本时也需要缓存光标区域
-				const float cx = (float)TextMargin + (float)abslocation.x - OffsetX;
+								const float cx = (float)TextMargin + (float)abslocation.x - OffsetX;
 				const float cy = (float)abslocation.y + OffsetY;
 				const float ch = (font->FontHeight > 16.0f) ? font->FontHeight : 16.0f;
 				this->_caretRectCache = { cx - 2.0f, cy - 2.0f, cx + 2.0f, cy + ch + 2.0f };

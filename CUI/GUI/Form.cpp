@@ -4,16 +4,144 @@
 #include <CppUtils/Graphics/Graphics.h>
 #include <algorithm>
 #include <functional>
+#include <unordered_map>
 #include <dwmapi.h>
 #include <windowsx.h>
 #pragma comment(lib, "Dwmapi.lib")
+
+HCURSOR Form::GetSystemCursor(CursorKind kind)
+{
+		static std::unordered_map<CursorKind, HCURSOR> cache;
+	auto it = cache.find(kind);
+	if (it != cache.end() && it->second) return it->second;
+
+	LPCWSTR id = IDC_ARROW;
+	switch (kind)
+	{
+	case CursorKind::Arrow: id = IDC_ARROW; break;
+	case CursorKind::Hand: id = IDC_HAND; break;
+	case CursorKind::IBeam: id = IDC_IBEAM; break;
+	case CursorKind::SizeWE: id = IDC_SIZEWE; break;
+	case CursorKind::SizeNS: id = IDC_SIZENS; break;
+	case CursorKind::SizeNWSE: id = IDC_SIZENWSE; break;
+	case CursorKind::SizeNESW: id = IDC_SIZENESW; break;
+	case CursorKind::SizeAll: id = IDC_SIZEALL; break;
+	case CursorKind::No: id = IDC_NO; break;
+	default: id = IDC_ARROW; break;
+	}
+	HCURSOR h = LoadCursorW(NULL, id);
+	cache.emplace(kind, h);
+	return h;
+}
+
+void Form::ApplyCursor(CursorKind kind)
+{
+			HCURSOR desired = GetSystemCursor(kind);
+	if (kind == _currentCursor && ::GetCursor() == desired) return;
+	_currentCursor = kind;
+	::SetCursor(desired);
+}
+
+static Control* HitTestDeepestChild(Control* root, POINT contentMouse)
+{
+	if (!root) return NULL;
+	if (!root->Visible || !root->Enable) return NULL;
+
+		for (int i = root->Count - 1; i >= 0; i--)
+	{
+		auto c = root->operator[](i);
+		if (!c || !c->Visible || !c->Enable) continue;
+		auto abs = c->AbsLocation;
+		auto sz = c->ActualSize();
+		if (contentMouse.x >= abs.x && contentMouse.y >= abs.y &&
+			contentMouse.x <= abs.x + sz.cx && contentMouse.y <= abs.y + sz.cy)
+		{
+			auto deeper = HitTestDeepestChild(c, contentMouse);
+			return deeper ? deeper : c;
+		}
+	}
+	return root;
+}
+
+Control* Form::HitTestControlAt(POINT contentMouse)
+{
+		for (auto fc : this->ForegroundControls)
+	{
+		if (!fc || !fc->Visible || !fc->Enable) continue;
+		auto loc = fc->Location;
+		auto sz = fc->ActualSize();
+		if (contentMouse.x >= loc.x && contentMouse.y >= loc.y &&
+			contentMouse.x <= (loc.x + sz.cx) && contentMouse.y <= (loc.y + sz.cy))
+		{
+			return HitTestDeepestChild(fc, contentMouse);
+		}
+	}
+
+		for (int pass = 0; pass < 2; pass++)
+	{
+		for (int i = 0; i < this->Controls.Count; i++)
+		{
+			auto c = this->Controls[i];
+			if (!c || !c->Visible || !c->Enable) continue;
+			if (pass == 0 && c->Type() != UIClass::UI_ComboBox) continue;
+			if (pass == 1 && c->Type() == UIClass::UI_ComboBox) continue;
+
+			auto loc = c->Location;
+			auto sz = c->ActualSize();
+			if (contentMouse.x >= loc.x && contentMouse.y >= loc.y &&
+				contentMouse.x <= (loc.x + sz.cx) && contentMouse.y <= (loc.y + sz.cy))
+			{
+				return HitTestDeepestChild(c, contentMouse);
+			}
+		}
+	}
+	return NULL;
+}
+
+CursorKind Form::QueryCursorAt(POINT mouseClient, POINT contentMouse)
+{
+		const int top = ClientTop();
+	if (this->VisibleHead && mouseClient.y < top)
+	{
+		return CursorKind::Arrow;
+	}
+
+		if (this->Selected && this->Selected->IsVisual && (GetAsyncKeyState(VK_LBUTTON) & 0x8000))
+	{
+		auto abs = this->Selected->AbsLocation;
+		int xof = contentMouse.x - abs.x;
+		int yof = contentMouse.y - abs.y;
+		return this->Selected->QueryCursor(xof, yof);
+	}
+
+	auto hit = HitTestControlAt(contentMouse);
+	if (!hit) return CursorKind::Arrow;
+	auto abs = hit->AbsLocation;
+	int xof = contentMouse.x - abs.x;
+	int yof = contentMouse.y - abs.y;
+	return hit->QueryCursor(xof, yof);
+}
+
+void Form::UpdateCursor(POINT mouseClient, POINT contentMouse)
+{
+	ApplyCursor(QueryCursorAt(mouseClient, contentMouse));
+}
+
+void Form::UpdateCursorFromCurrentMouse()
+{
+	if (!this->Handle) return;
+	POINT mouse{};
+	GetCursorPos(&mouse);
+	ScreenToClient(this->Handle, &mouse);
+	POINT contentMouse{ mouse.x, mouse.y - ClientTop() };
+	UpdateCursor(mouse, contentMouse);
+}
 
 bool Form::TryGetCaptionButtonRect(CaptionButtonKind kind, RECT& out)
 {
 	if (!this->VisibleHead || this->HeadHeight <= 0) return false;
 
-	// 右侧从右往左排：Close / Max / Min（可按开关隐藏）
-	int xRight = this->Size.cx;
+		int xRight = this->Size.cx;
 	int h = this->HeadHeight;
 	int w = this->HeadHeight;
 
@@ -82,13 +210,11 @@ void Form::UpdateCaptionHover(POINT ptClient)
 	auto oldMax = _capMaxState;
 	auto oldClose = _capCloseState;
 
-	// hover state
-	_capMinState = (onBtn && hit == CaptionButtonKind::Minimize) ? CaptionButtonState::Hover : CaptionButtonState::None;
+		_capMinState = (onBtn && hit == CaptionButtonKind::Minimize) ? CaptionButtonState::Hover : CaptionButtonState::None;
 	_capMaxState = (onBtn && hit == CaptionButtonKind::Maximize) ? CaptionButtonState::Hover : CaptionButtonState::None;
 	_capCloseState = (onBtn && hit == CaptionButtonKind::Close) ? CaptionButtonState::Hover : CaptionButtonState::None;
 
-	// 如果按下中，则保持 pressed 的视觉优先
-	if (_capPressed)
+		if (_capPressed)
 	{
 		if (_capPressedKind == CaptionButtonKind::Minimize) _capMinState = CaptionButtonState::Pressed;
 		if (_capPressedKind == CaptionButtonKind::Maximize) _capMaxState = CaptionButtonState::Pressed;
@@ -136,14 +262,12 @@ int Form::ComputeDesiredFrameIntervalMs()
 			if (best <= 0) best = v;
 			else best = std::min(best, v);
 		}
-		// 递归扫描子控件（Count/operator[] 可用）
-		for (int i = 0; i < c->Count; i++)
+				for (int i = 0; i < c->Count; i++)
 			consider(c->operator[](i));
 	};
 	for (auto c : this->Controls) consider(c);
 	for (auto c : this->ForegroundControls) consider(c);
-	// 避免 0/过小 interval：至少 10ms（给媒体播放器/动画留空间）
-	if (best > 0 && best < 10) best = 10;
+		if (best > 0 && best < 10) best = 10;
 	return best;
 }
 
@@ -162,8 +286,7 @@ void Form::UpdateAnimationTimer()
 	}
 	if (this->_animIntervalMs != newInterval)
 	{
-		// 重新设定最小刷新间隔（所有需要持续刷新的控件取 min）
-		if (this->_animIntervalMs != 0)
+				if (this->_animIntervalMs != 0)
 			KillTimer(this->Handle, this->_animTimerId);
 		SetTimer(this->Handle, this->_animTimerId, newInterval, NULL);
 		this->_animIntervalMs = newInterval;
@@ -188,7 +311,6 @@ void Form::Invalidate(const RECT& rc, bool immediate)
 		::UpdateWindow(this->Handle);
 }
 
-// 适配 Control::PostRender 传入的 D2D1_RECT_F
 void Form::Invalidate(D2D1_RECT_F rc, bool immediate)
 {
 	RECT r = ToRECT(rc, 2);
@@ -216,15 +338,13 @@ void Form::InvalidateControl(Control* c, int inflatePx, bool immediate)
 	if (!c || !this->Handle) return;
 	if (!c->IsVisual) return;
 	RECT rc = ToRECT(c->AbsRect, inflatePx);
-	// 控件坐标系：以“客户区内容(标题栏下方)”为原点，需要转换到窗口客户区坐标
-	OffsetRect(&rc, 0, ClientTop());
+		OffsetRect(&rc, 0, ClientTop());
 	Invalidate(rc, immediate);
 }
 
 void Form::InvalidateAnimatedControls(bool immediate)
 {
-	// 只无效化“需要持续刷新”的控件区域（例如：输入光标/动画/未来的视频播放器控件）
-	std::function<void(Control*)> consider;
+		std::function<void(Control*)> consider;
 	consider = [&](Control* c)
 	{
 		if (!c) return;
@@ -410,9 +530,7 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 		this->Location.y == 0 ? ((int)(desktopHeight - this->Size.cy) / 2) : this->Location.y,
 		this->Size.cx,
 		this->Size.cy,
-		// 重要：不要把窗口设为其他窗口的 owner（owned window 默认不出现在任务栏，
-		// 且最小化/还原会跟随 owner，导致你描述的“只能还原一个窗口”等异常）
-		NULL,
+						NULL,
 		NULL,
 		GetModuleHandleW(0),
 		0);
@@ -435,8 +553,7 @@ void Form::Show()
 }
 static HWND GetBestOwnerWindowInCurrentProcess(HWND exclude = NULL)
 {
-	// 1) 优先使用当前前台窗口（且属于本进程）
-	HWND fg = GetForegroundWindow();
+		HWND fg = GetForegroundWindow();
 	if (fg && fg != exclude)
 	{
 		DWORD pid = 0;
@@ -445,8 +562,7 @@ static HWND GetBestOwnerWindowInCurrentProcess(HWND exclude = NULL)
 			return fg;
 	}
 
-	// 2) 其次使用当前激活窗口（且属于本进程）
-	HWND active = GetActiveWindow();
+		HWND active = GetActiveWindow();
 	if (active && active != exclude)
 	{
 		DWORD pid = 0;
@@ -455,8 +571,7 @@ static HWND GetBestOwnerWindowInCurrentProcess(HWND exclude = NULL)
 			return active;
 	}
 
-	// 3) 再从 Application::Forms 里找任意一个（不是自己）
-	for (auto& kv : Application::Forms)
+		for (auto& kv : Application::Forms)
 	{
 		HWND h = kv.first;
 		if (h && h != exclude && IsWindow(h) && IsWindowVisible(h))
@@ -468,19 +583,16 @@ static HWND GetBestOwnerWindowInCurrentProcess(HWND exclude = NULL)
 
 void Form::ShowDialog(HWND parent)
 {
-	// 选择 owner：未指定则自动选取（如果没有其他窗口则保持 NULL）
-	HWND owner = parent;
+		HWND owner = parent;
 	if (!owner)
 		owner = GetBestOwnerWindowInCurrentProcess(this->Handle);
 
-	// 将当前窗口设置为 owned window（对话框语义：不单独占任务栏、跟随 owner）
-	if (owner && IsWindow(owner))
+		if (owner && IsWindow(owner))
 		SetWindowLongPtrW(this->Handle, GWLP_HWNDPARENT, (LONG_PTR)owner);
 	else
 		SetWindowLongPtrW(this->Handle, GWLP_HWNDPARENT, 0);
 
-	// 禁用 owner，形成真正的“模态”
-	if (owner && IsWindow(owner))
+		if (owner && IsWindow(owner))
 	{
 		EnableWindow(owner, FALSE);
 	}
@@ -492,19 +604,16 @@ void Form::ShowDialog(HWND parent)
 	SetForegroundWindow(this->Handle);
 	SetActiveWindow(this->Handle);
 
-	// 模态消息循环：需要分发所有窗口消息（否则托盘/其他窗体绘制会异常）
-	MSG msg;
+		MSG msg;
 	while (IsWindow(this->Handle))
 	{
 		BOOL r = GetMessageW(&msg, NULL, 0, 0);
-		if (r <= 0) break; // WM_QUIT or error
-
+		if (r <= 0) break; 
 		TranslateMessage(&msg);
 		DispatchMessageW(&msg);
 	}
 
-	// 恢复 owner
-	if (owner && IsWindow(owner))
+		if (owner && IsWindow(owner))
 	{
 		EnableWindow(owner, TRUE);
 		SetForegroundWindow(owner);
@@ -525,11 +634,9 @@ bool Form::DoEvent()
 		DispatchMessage(&msg);
 		hasMessage = true;
 	}
-	// 关键：如果窗口都关了，不能阻塞，否则 main.cpp 无法退出循环
-	if (!hasMessage && Application::Forms.size() > 0)
+		if (!hasMessage && Application::Forms.size() > 0)
 	{
-		// 进入等待，避免空转占用 CPU；WM_TIMER/输入/绘制都会唤醒
-		WaitMessage();
+				WaitMessage();
 	}
 	return hasMessage;
 }
@@ -546,8 +653,7 @@ bool Form::WaiteEvent()
 }
 bool Form::Update(bool force)
 {
-	// 默认 Update：从系统获取当前脏区，然后走 UpdateDirtyRect
-	if (!IsWindow(this->Handle)) return false;
+		if (!IsWindow(this->Handle)) return false;
 	if (!(force || ControlChanged)) return false;
 
 	RECT dirty{};
@@ -560,28 +666,24 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 {
 	if (!IsWindow(this->Handle) || !this->Render) return false;
 
-	// 空矩形直接跳过
-	if (dirty.right <= dirty.left || dirty.bottom <= dirty.top)
+		if (dirty.right <= dirty.left || dirty.bottom <= dirty.top)
 		return false;
 
 	UpdateAnimationTimer();
 
 	this->Render->BeginRender();
-	// 局部刷新：只填充脏区背景（不要用 Clear，它会清全屏）
-	this->Render->FillRect((float)dirty.left, (float)dirty.top, (float)(dirty.right - dirty.left), (float)(dirty.bottom - dirty.top), this->BackColor);
+		this->Render->FillRect((float)dirty.left, (float)dirty.top, (float)(dirty.right - dirty.left), (float)(dirty.bottom - dirty.top), this->BackColor);
 
 	if (this->Image)
 	{
-		// 图片绘制通常覆盖全窗，使用脏区 clip 降低开销
-		this->Render->PushDrawRect((float)dirty.left, (float)dirty.top, (float)(dirty.right - dirty.left), (float)(dirty.bottom - dirty.top));
+				this->Render->PushDrawRect((float)dirty.left, (float)dirty.top, (float)(dirty.right - dirty.left), (float)(dirty.bottom - dirty.top));
 		this->RenderImage();
 		this->Render->PopDrawRect();
 	}
 
 	if (VisibleHead)
 	{
-		// head 如果与脏区相交再画（否则跳过）
-		RECT headRc{ 0, 0, this->Size.cx, this->HeadHeight };
+				RECT headRc{ 0, 0, this->Size.cx, this->HeadHeight };
 		if (RectIntersects(dirty, headRc))
 		{
 			this->Render->FillRect(0, 0, this->Size.cx, this->HeadHeight, this->HeadBackColor);
@@ -594,8 +696,7 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 			{
 				auto tSize = defaultFont->GetTextSize(this->Text);
 				float textRangeWidth = this->Size.cx;
-				// 标题文本区域：去掉右侧 caption buttons 区域
-				int buttonCount = 0;
+								int buttonCount = 0;
 				if (this->MinBox) buttonCount++;
 				if (this->MaxBox) buttonCount++;
 				if (this->CloseBox) buttonCount++;
@@ -610,8 +711,7 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 				this->Render->DrawString(this->Text, 5.0f, headTextTop, this->ForeColor);
 			}
 
-			// 画 caption buttons
-			auto drawBtn = [&](CaptionButtonKind kind, CaptionButtonState st, const wchar_t* glyph, D2D1_COLOR_F hover, D2D1_COLOR_F pressed)
+						auto drawBtn = [&](CaptionButtonKind kind, CaptionButtonState st, D2D1_COLOR_F hover, D2D1_COLOR_F pressed)
 			{
 				RECT r{};
 				if (!TryGetCaptionButtonRect(kind, r)) return;
@@ -620,32 +720,74 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 				else if (st == CaptionButtonState::Pressed)
 					this->Render->FillRect((float)r.left, (float)r.top, (float)(r.right - r.left), (float)(r.bottom - r.top), pressed);
 
-				// 简单居中绘制 glyph（后续可换成矢量图标）
-				auto sz = defaultFont->GetTextSize(glyph);
-				float cx = r.left + ((r.right - r.left) - sz.width) * 0.5f;
-				float cy = r.top + ((r.bottom - r.top) - sz.height) * 0.5f;
-				if (cx < (float)r.left) cx = (float)r.left;
-				if (cy < (float)r.top) cy = (float)r.top;
-				this->Render->DrawString(glyph, cx, cy, this->ForeColor);
+								const float left = (float)r.left;
+				const float top = (float)r.top;
+				const float bw = (float)(r.right - r.left);
+				const float bh = (float)(r.bottom - r.top);
+				const float s = (bw < bh) ? bw : bh;
+				const float cx = left + bw * 0.5f;
+				const float cy = top + bh * 0.5f;
+
+								const float icon = s * 0.42f;
+				const float half = icon * 0.5f;
+				float stroke = s * 0.08f;
+				if (stroke < 1.0f) stroke = 1.0f;
+
+				auto drawMinimize = [&]()
+				{
+										const float y = cy + half * 0.35f;
+					this->Render->DrawLine({ cx - half, y }, { cx + half, y }, this->ForeColor, stroke);
+				};
+				auto drawMaximize = [&]()
+				{
+										const float x = cx - half;
+					const float y = cy - half;
+					this->Render->DrawRect(x, y, icon, icon, this->ForeColor, stroke);
+				};
+				auto drawRestore = [&]()
+				{
+										const float off = stroke * 1.2f;
+					const float xBack = (cx - half) - off;
+					const float yBack = (cy - half) - off;
+					const float xFront = (cx - half) + off;
+					const float yFront = (cy - half) + off;
+					this->Render->DrawRect(xBack, yBack, icon, icon, this->ForeColor, stroke);
+					this->Render->DrawRect(xFront, yFront, icon, icon, this->ForeColor, stroke);
+				};
+				auto drawClose = [&]()
+				{
+										this->Render->DrawLine({ cx - half, cy - half }, { cx + half, cy + half }, this->ForeColor, stroke);
+					this->Render->DrawLine({ cx + half, cy - half }, { cx - half, cy + half }, this->ForeColor, stroke);
+				};
+
+				switch (kind)
+				{
+				case CaptionButtonKind::Minimize:
+					drawMinimize();
+					break;
+				case CaptionButtonKind::Maximize:
+					if (IsZoomed(this->Handle))
+						drawRestore();
+					else
+						drawMaximize();
+					break;
+				case CaptionButtonKind::Close:
+					drawClose();
+					break;
+				}
 			};
 
-			// close
-			drawBtn(CaptionButtonKind::Close, _capCloseState, L"✕", this->CloseHoverColor, this->ClosePressedColor);
-			// max/restore glyph
-			drawBtn(CaptionButtonKind::Maximize, _capMaxState, IsZoomed(this->Handle) ? L"⬜" : L"❐", this->CaptionHoverColor, this->CaptionPressedColor);
-			// min
-			drawBtn(CaptionButtonKind::Minimize, _capMinState, L"―", this->CaptionHoverColor, this->CaptionPressedColor);
+						drawBtn(CaptionButtonKind::Close, _capCloseState, this->CloseHoverColor, this->ClosePressedColor);
+						drawBtn(CaptionButtonKind::Maximize, _capMaxState, this->CaptionHoverColor, this->CaptionPressedColor);
+						drawBtn(CaptionButtonKind::Minimize, _capMinState, this->CaptionHoverColor, this->CaptionPressedColor);
 
 			this->Render->PopDrawRect();
 		}
 	}
-
-	// -------- 绘制客户区内容（控件坐标系：0,0 从标题栏下方开始）--------
 	const int top = ClientTop();
 	RECT contentDirty = dirty;
 	contentDirty.top -= top;
 	contentDirty.bottom -= top;
-	// 裁剪到内容区域
 	if (contentDirty.top < 0) contentDirty.top = 0;
 	if (contentDirty.left < 0) contentDirty.left = 0;
 	if (contentDirty.right > this->Size.cx) contentDirty.right = this->Size.cx;
@@ -653,7 +795,6 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 
 	if (contentDirty.right > contentDirty.left && contentDirty.bottom > contentDirty.top)
 	{
-		// 注意：clip 需要在设置 transform 之后 push，避免坐标系错位
 		this->Render->SetTransform(D2D1::Matrix3x2F::Translation(0.0f, (float)top));
 		this->Render->PushDrawRect((float)contentDirty.left, (float)contentDirty.top, (float)(contentDirty.right - contentDirty.left), (float)(contentDirty.bottom - contentDirty.top));
 
@@ -677,7 +818,6 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 		this->Render->ClearTransform();
 	}
 
-	// OnPaint 维持“窗口客户区坐标系”（包含标题栏），避免破坏现有用法
 	this->OnPaint(this);
 
 	this->Render->EndRender();
@@ -715,24 +855,22 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 	{ 
 	case WM_MOUSEMOVE:
 	{
-		// 标题栏按钮 hover/pressed 状态更新（即使不在控件上也需要）
-		if (this->VisibleHead && mouse.y < this->HeadHeight)
+				if (this->VisibleHead && mouse.y < this->HeadHeight)
 		{
 			UpdateCaptionHover(mouse);
 		}
 		else if (this->_capMinState != CaptionButtonState::None || this->_capMaxState != CaptionButtonState::None || this->_capCloseState != CaptionButtonState::None)
 		{
-			// 离开标题栏后清 hover
-			if (!this->_capPressed)
+						if (!this->_capPressed)
 			{
 				ClearCaptionStates();
 				Invalidate(TitleBarRectClient(), false);
 			}
 		}
 
-		// 鼠标在标题栏区域：不参与控件命中（避免与标题栏逻辑冲突）
-		if (this->VisibleHead && mouse.y < top)
+				if (this->VisibleHead && mouse.y < top)
 		{
+						ApplyCursor(CursorKind::Arrow);
 			break;
 		}
 
@@ -743,6 +881,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 				HitControl = this->Selected;
 				auto location = this->Selected->AbsLocation;
 				this->Selected->ProcessMessage(message, wParam, lParam, contentMouse.x - location.x, contentMouse.y - location.y);
+								UpdateCursor(mouse, contentMouse);
 				break;
 			}
 		}
@@ -792,6 +931,8 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 			if (this->UnderMouse)this->UnderMouse->PostRender();
 			if (lastUnderMouse)lastUnderMouse->PostRender();
 		}
+
+				UpdateCursor(mouse, contentMouse);
 	}
 	break;
 	case WM_DROPFILES:
@@ -808,8 +949,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 		{
 			if (VisibleHead)
 			{
-				// 1) 若点在 caption button 上：按下状态
-				CaptionButtonKind kind{};
+								CaptionButtonKind kind{};
 				if (HitTestCaptionButtons(mouse, kind))
 				{
 					_capPressed = true;
@@ -820,8 +960,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 					break;
 				}
 
-				// 2) 标题栏空白区域：拖动窗口（排除按钮区域）
-				if (mouse.y < top)
+								if (mouse.y < top)
 				{
 					ReleaseCapture();
 					PostMessage(this->Handle, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0);
@@ -830,8 +969,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 		}
 		else if (WM_LBUTTONUP == message)
 		{
-			// 释放 caption button
-			if (_capTracking)
+						if (_capTracking)
 			{
 				ReleaseCapture();
 				_capTracking = false;
@@ -842,11 +980,13 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 					_capPressed = false;
 					ClearCaptionStates();
 					ExecuteCaptionButton(kind);
+										UpdateCursor(mouse, contentMouse);
 					break;
 				}
 				_capPressed = false;
 				ClearCaptionStates();
 				Invalidate(TitleBarRectClient(), false);
+				UpdateCursor(mouse, contentMouse);
 				break;
 			}
 
@@ -857,14 +997,14 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 					HitControl = this->Selected;
 					auto location = this->Selected->AbsLocation;
 					this->Selected->ProcessMessage(message, wParam, lParam, contentMouse.x - location.x, contentMouse.y - location.y);
+															UpdateCursor(mouse, contentMouse);
 					break;
 				}
 			}
 		}
 		else if (WM_LBUTTONDBLCLK == message)
 		{
-			// 标题栏双击：切换最大化/还原（排除按钮区域）
-			if (VisibleHead && mouse.y < this->HeadHeight)
+						if (VisibleHead && mouse.y < this->HeadHeight)
 			{
 				CaptionButtonKind kind{};
 				if (!HitTestCaptionButtons(mouse, kind))
@@ -874,8 +1014,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 				}
 			}
 		}
-		// 点击在标题栏区域（且不是 caption buttons）：不再向控件派发
-		if (this->VisibleHead && mouse.y < top)
+				if (this->VisibleHead && mouse.y < top)
 		{
 			break;
 		}
@@ -915,6 +1054,8 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 			goto reExc1;
 		}
 	ext1:;
+						if (message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP)
+			UpdateCursor(mouse, contentMouse);
 	}
 	break;
 	case WM_KEYDOWN:
@@ -1008,8 +1149,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 	case WM_CLOSE:
 	{
 		this->OnFormClosing(this);
-		// WM_CLOSE 之后窗口仍可能收到少量消息；这里必须把 Render 置空，避免悬空指针被再次使用
-		delete this->Render;
+				delete this->Render;
 		this->Render = NULL;
 		return true;
 	}
@@ -1028,8 +1168,7 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 		this->Selected = NULL;
 		se->PostRender();
 	}
-	// 统一走 Invalidate + WM_PAINT，避免在消息处理过程中直接绘制导致重入/闪烁
-	UpdateAnimationTimer();
+		UpdateAnimationTimer();
 	return true;
 }
 void Form::RenderImage()
@@ -1170,15 +1309,21 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 
 		switch (message)
 		{
+		case WM_SETCURSOR:
+		{
+						if (LOWORD(lParam) == HTCLIENT)
+			{
+				form->UpdateCursorFromCurrentMouse();
+				return TRUE;
+			}
+		}
+		break;
 		case WM_ERASEBKGND:
-			// D2D 自己全量绘制，避免 GDI 擦背景导致闪烁
 			return 1;
 		case WM_PAINT:
 		{
 			PAINTSTRUCT ps{};
 			BeginPaint(hWnd, &ps);
-			// 关键修复：WM_PAINT 内不能再用 GetUpdateRect（BeginPaint 后脏区会被验证）
-			// 直接使用 ps.rcPaint 做局部绘制，避免窗口“永远不显示/像最小化”
 			if (form->Render)
 				form->UpdateDirtyRect(ps.rcPaint, true);
 			EndPaint(hWnd, &ps);
@@ -1188,10 +1333,6 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 		{
 			if (wParam == form->_animTimerId)
 			{
-				// 局部刷新：只无效化需要持续刷新的控件区域
-				// 重要：WM_PAINT 属于“空闲时”消息；在某些消息循环/高频消息场景下可能被饿死，
-				// 导致光标闪烁等动画只能在其它事件触发重绘时才更新。
-				// 这里主动 UpdateWindow，确保定时刷新可见。
 				form->InvalidateAnimatedControls(true);
 				return 0;
 			}
@@ -1209,7 +1350,6 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 			if (!DwmDefWindowProc(hWnd, message, wParam, lParam, &lr))
 			{
 				lr = CustomFrameHitTest(hWnd, wParam, lParam, form->ClientTop());
-				// 鼠标在自绘 caption buttons 上时，必须返回 HTCLIENT，否则会被当作 HTCAPTION 导致无法点击
 				if (lr == HTCAPTION)
 				{
 					POINT ptClient{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -1229,11 +1369,6 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 		{
 			form->OnFormClosed(form);
 			Application::Forms.Remove(form->Handle);
-			
-			
-			
-			
-			
 		}
 		break;
 		case (WM_USER + 1):

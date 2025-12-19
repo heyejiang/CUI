@@ -1,4 +1,4 @@
-﻿#include "Button.h"
+#include "Button.h"
 #include "Form.h"
 UIClass Button::Type() { return UIClass::UI_Button; }
 Button::Button(std::wstring text, int x, int y, int width, int height)
@@ -8,6 +8,7 @@ Button::Button(std::wstring text, int x, int y, int width, int height)
 	this->Size = SIZE{ width,height };
 	this->BackColor = Colors::Snow3;
 	this->BolderColor = Colors::Snow4;
+	this->Cursor = CursorKind::Hand;
 }
 void Button::Update()
 {

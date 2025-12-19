@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <iostream>
 #include "GUI/Form.h"
 #include "CustomControls.h"
@@ -6,7 +6,15 @@ class DemoWindow : public Form
 {
 public:
     DemoWindow();
-
+    void label1_OnMouseWheel(class Control* sender, MouseEventArgs e);
+    void button1_OnMouseClick(class Control* sender, MouseEventArgs e);
+    void radiobox1_OnChecked(class Control* sender);
+    void radiobox2_OnChecked(class Control* sender);
+    void bt2_OnMouseClick(class Control* sender, MouseEventArgs e);
+    void sw1_OnMouseClick(class Control* sender, MouseEventArgs e);
+    void sw2_OnMouseClick(class Control* sender, MouseEventArgs e);
+    void iconButton_OnMouseClick(class Control* sender, MouseEventArgs e);
+    void picturebox1_OnDropFile(class Control* sender, List<std::wstring> files);
     ID2D1Bitmap* bmps[10]{};
     ID2D1Bitmap* icos[8];
     Label* label1;
@@ -30,3 +38,5 @@ public:
     Switch* sw1;
     Switch* sw2;
 };
+
+NotifyIcon* TestNotifyIcon(HWND handle);

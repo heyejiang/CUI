@@ -122,6 +122,22 @@ int TreeNode::UnfoldedCount()
 }
 UIClass TreeView::Type() { return UIClass::UI_TreeView; }
 
+CursorKind TreeView::QueryCursor(int xof, int yof)
+{
+	(void)yof;
+	if (!this->Enable) return CursorKind::Arrow;
+
+		const float fontHeight = this->Font ? this->Font->FontHeight : 0.0f;
+	if (fontHeight > 0.0f)
+	{
+		const int renderCount = std::max(1, (int)((float)this->Height / fontHeight));
+		const bool hasVScroll = (this->MaxRenderItems > renderCount);
+		if (hasVScroll && xof >= (this->Width - 8))
+			return CursorKind::SizeNS;
+	}
+	return CursorKind::Arrow;
+}
+
 TreeView::TreeView(int x, int y, int width, int height)
 {
 	this->Location = POINT{ x,y };
@@ -145,8 +161,7 @@ void TreeView::UpdateScrollDrag(float posY) {
 	int renderItemCount = (int)(height / fontHeight);
 	if (renderItemCount <= 0) renderItemCount = 1;
 
-	// 不需要滚动条时，直接归零
-	if (renderItemCount >= this->MaxRenderItems)
+		if (renderItemCount >= this->MaxRenderItems)
 	{
 		if (this->ScrollIndex != 0)
 		{
@@ -323,8 +338,7 @@ bool TreeView::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xo
 			}
 			if (xof >= Width - 8 && xof <= Width)
 			{
-				// 点击滚动条轨道：立即定位到相对位置（无需先拖拽）
-				isDraggingScroll = true;
+								isDraggingScroll = true;
 				UpdateScrollDrag((float)yof);
 			}
 			else

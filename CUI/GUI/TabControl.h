@@ -19,6 +19,10 @@ public:
 	int TitleHeight = 24;
 	int TitleWidth = 120;
 	float Boder = 1.5f;
+	READONLY_PROPERTY(int, PageCount);
+	GET(int, PageCount);
+	READONLY_PROPERTY(List<Control*>&, Pages);
+	GET(List<Control*>&, Pages);
 	TabControl(int x, int y, int width = 120, int height = 24);
 	TabPage* AddPage(std::wstring name);
 	void Update() override;

@@ -20,8 +20,7 @@ Control::Control()
 }
 Control::~Control()
 {
-	// 仅释放该控件自己设置过的字体；默认字体为共享对象不可释放
-	if (this->_font)
+		if (this->_font)
 		delete this->_font;
 	for (auto c : this->Children)
 	{
@@ -66,7 +65,7 @@ Control* Control::operator[](int index)
 }
 Control* Control::get(int index)
 {
-	if (this->Children.Count == 0)
+	if (this->Children.Count <= index)
 		return NULL;
 	return this->Children[index];
 }
@@ -75,8 +74,7 @@ void Control::RemoveControl(Control* c)
 	this->Children.Remove(c);
 	c->Parent = NULL;
 	c->ParentForm = NULL;
-	// Render 属于 Form，不应在移除子控件时触碰/置空
-}
+	}
 GET_CPP(Control, POINT, AbsLocation)
 {
 	Control* tmpc = this;
@@ -94,12 +92,7 @@ GET_CPP(Control, D2D1_RECT_F, AbsRect)
 {
 	Control* tmpc = this;
 	auto absMin = this->AbsLocation;
-	// 注意：某些控件（如 ComboBox 展开）会在 ActualSize() 中返回“可视绘制区域”的真实尺寸。
-	// AbsRect 必须基于 ActualSize 才能正确做：
-	// - 局部无效化（PostRender / Form::UpdateDirtyRect）
-	// - 命中测试裁剪区域（Update 内 PushDrawRect）
-	// - 前景层覆盖绘制（展开下拉/弹层）
-	auto asize = this->ActualSize();
+						auto asize = this->ActualSize();
 	return D2D1_RECT_F{
 		(float)absMin.x,
 		(float)absMin.y,

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "RadioBox.h"
 #include "Form.h"
 UIClass RadioBox::Type() { return UIClass::UI_CheckBox; }
@@ -7,6 +7,7 @@ RadioBox::RadioBox(std::wstring text, int x, int y)
 	this->Text = text;
 	this->Location = POINT{ x,y };
 	this->BackColor = D2D1_COLOR_F{ 0.75f , 0.75f , 0.75f , 0.75f };
+	this->Cursor = CursorKind::Hand;
 }
 SIZE RadioBox::ActualSize()
 {

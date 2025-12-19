@@ -44,7 +44,6 @@ private:
 	POINT _Location_INIT;
 	SIZE _Size_INTI;
 	std::wstring _text;
-	// 自绘标题栏按钮（避免用 3 个 Button 控件污染控件树/事件分发）
 	enum class CaptionButtonKind : uint8_t { Minimize, Maximize, Close };
 	enum class CaptionButtonState : uint8_t { None, Hover, Pressed };
 	CaptionButtonState _capMinState = CaptionButtonState::None;
@@ -54,7 +53,6 @@ private:
 	CaptionButtonKind _capPressedKind = CaptionButtonKind::Close;
 	bool _capTracking = false;
 
-	// 标题栏外观（可后续抽成 Theme）
 	D2D1_COLOR_F HeadBackColor = { 0.5f ,0.5f ,0.5f ,0.25f };
 	D2D1_COLOR_F CaptionHoverColor = { 1.f, 1.f, 1.f, 0.15f };
 	D2D1_COLOR_F CaptionPressedColor = { 1.f, 1.f, 1.f, 0.25f };
@@ -69,7 +67,6 @@ private:
 	void ExecuteCaptionButton(CaptionButtonKind kind);
 	void ClearCaptionStates();
 	bool _showInTaskBar = true;
-	// 连续刷新（动画/实时）定时器
 	UINT_PTR _animTimerId = 0xC001;
 	UINT _animIntervalMs = 0;
 	void UpdateAnimationTimer();
@@ -78,6 +75,14 @@ private:
 	void InvalidateAnimatedControls(bool immediate = false);
 	static bool RectIntersects(const RECT& a, const RECT& b);
 	static RECT ToRECT(D2D1_RECT_F r, int inflatePx = 0);
+
+		CursorKind _currentCursor = CursorKind::Arrow;
+	void ApplyCursor(CursorKind kind);
+	void UpdateCursor(POINT mouseClient, POINT contentMouse);
+	void UpdateCursorFromCurrentMouse();
+	CursorKind QueryCursorAt(POINT mouseClient, POINT contentMouse);
+	class Control* HitTestControlAt(POINT contentMouse);
+	static HCURSOR GetSystemCursor(CursorKind kind);
 public:
 	FormMouseWheelEvent OnMouseWheel;
 	FormMouseMoveEvent OnMouseMove;
@@ -149,7 +154,6 @@ public:
 	HICON Icon = NULL;
 	Form(std::wstring _text = L"NativeWindow", POINT _location = { 0,0 }, SIZE _size = { 600,400 });
 	void Show();
-	// 模态显示：parent==NULL 时自动在当前进程内选择一个合适的 owner（若没有则保持 NULL）
 	void ShowDialog(HWND parent = NULL);
 	void Close();
 
@@ -173,20 +177,15 @@ public:
 	bool RemoveControl(Control* c);
 	virtual bool ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof);
 	virtual bool Update(bool force = false);
-	// WM_PAINT 专用：按给定脏区进行局部绘制（客户端坐标）
 	virtual bool UpdateDirtyRect(const RECT& dirty, bool force = false);
 	virtual bool ForceUpdate();
-	// 请求重绘（统一走 WM_PAINT），用于 PostRender/实时控件刷新
 	void Invalidate(bool immediate = false);
-	// 仅重绘指定区域（客户端坐标）
 	void Invalidate(const RECT& rc, bool immediate = false);
-	// 仅重绘指定区域（客户端坐标，浮点）
 	void Invalidate(D2D1_RECT_F rc, bool immediate = false);
 	virtual void RenderImage();
 	D2D1_RECT_F ChildRect();
 	Control* LastChild();
 	static bool DoEvent();
-	
 	static bool WaiteEvent();
 	static LRESULT CALLBACK WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 };
