@@ -317,7 +317,14 @@ void Designer::OnExportClick()
 		CodeGenerator generator(fileName, controls,
 			_canvas ? _canvas->GetDesignedFormText() : L"",
 			_canvas ? _canvas->GetDesignedFormSize() : SIZE{ 800, 600 },
-			_canvas ? _canvas->GetDesignedFormLocation() : POINT{ 100, 100 });
+			_canvas ? _canvas->GetDesignedFormLocation() : POINT{ 100, 100 },
+			_canvas ? _canvas->GetDesignedFormVisibleHead() : true,
+			_canvas ? _canvas->GetDesignedFormHeadHeight() : 24,
+			_canvas ? _canvas->GetDesignedFormMinBox() : true,
+			_canvas ? _canvas->GetDesignedFormMaxBox() : true,
+			_canvas ? _canvas->GetDesignedFormCloseBox() : true,
+			_canvas ? _canvas->GetDesignedFormCenterTitle() : true,
+			_canvas ? _canvas->GetDesignedFormAllowResize() : true);
 		
 		if (generator.GenerateFiles(headerPath, cppPath))
 		{

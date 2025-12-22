@@ -143,7 +143,6 @@ void DemoWindow::radiobox2_OnChecked(class Control* sender)
 
 void DemoWindow::bt2_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
-	PictureBox* picturebox1 = this->picturebox1;
 	OpenFileDialog ofd;
 
 	ofd.Filter = MakeDialogFilterStrring("图片文件", "*.jpg;*.png;*.bmp;*.svg;*.webp");

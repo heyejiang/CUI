@@ -115,7 +115,7 @@ TabControlPagesEditorDialog::TabControlPagesEditorDialog(TabControl* target)
 		_grid->SelectedColumnIndex = 0;
 		_grid->ChangeEditionSelected(0, _grid->SelectedRowIndex);
 		SyncButtons();
-	};
+		};
 	_remove->OnMouseClick += [this](Control*, MouseEventArgs) { RemoveSelected(); };
 	_up->OnMouseClick += [this](Control*, MouseEventArgs) { MoveSelected(-1); };
 	_down->OnMouseClick += [this](Control*, MouseEventArgs) { MoveSelected(+1); };
@@ -192,10 +192,10 @@ TabControlPagesEditorDialog::TabControlPagesEditorDialog(TabControl* target)
 		Applied = true;
 		_target->PostRender();
 		this->Close();
-	};
+		};
 
 	_cancel->OnMouseClick += [this](Control*, MouseEventArgs) {
 		Applied = false;
 		this->Close();
-	};
+		};
 }

@@ -15,6 +15,13 @@ private:
 	std::wstring _formText;
 	SIZE _formSize = { 800, 600 };
 	POINT _formLocation = { 100, 100 };
+	bool _formVisibleHead = true;
+	int _formHeadHeight = 24;
+	bool _formMinBox = true;
+	bool _formMaxBox = true;
+	bool _formCloseBox = true;
+	bool _formCenterTitle = true;
+	bool _formAllowResize = true;
 	std::unordered_map<const DesignerControl*, std::string> _varNameOf;
 	
 	std::string WStringToString(const std::wstring& wstr) const;
@@ -41,7 +48,10 @@ private:
 	
 public:
 	CodeGenerator(std::wstring className, const std::vector<std::shared_ptr<DesignerControl>>& controls,
-		std::wstring formText = L"", SIZE formSize = SIZE{ 800, 600 }, POINT formLocation = POINT{ 100, 100 });
+		std::wstring formText = L"", SIZE formSize = SIZE{ 800, 600 }, POINT formLocation = POINT{ 100, 100 },
+		bool formVisibleHead = true, int formHeadHeight = 24,
+		bool formMinBox = true, bool formMaxBox = true, bool formCloseBox = true,
+		bool formCenterTitle = true, bool formAllowResize = true);
 	
 	bool GenerateFiles(std::wstring headerPath, std::wstring cppPath);
 	std::string GenerateHeader();

@@ -38,19 +38,38 @@ std::vector<std::wstring> TreeViewNodesEditorDialog::SplitLines(const std::wstri
 
 int TreeViewNodesEditorDialog::CountIndentTabs(const std::wstring& s)
 {
-	int n = 0;
-	for (wchar_t c : s)
+	// 兼容：允许使用 tab 或空格缩进（4 个空格视为 1 级）。
+	int depth = 0;
+	int spaceRun = 0;
+	for (size_t i = 0; i < s.size(); i++)
 	{
-		if (c == L'\t') n++;
-		else break;
+		wchar_t c = s[i];
+		if (c == L'\t')
+		{
+			depth++;
+			spaceRun = 0;
+			continue;
+		}
+		if (c == L' ')
+		{
+			spaceRun++;
+			if (spaceRun >= 4)
+			{
+				depth++;
+				spaceRun = 0;
+			}
+			continue;
+		}
+		break;
 	}
-	return n;
+	return depth;
 }
 
 std::wstring TreeViewNodesEditorDialog::StripIndentTabs(const std::wstring& s)
 {
+	// 移除所有前导缩进空白（tab/space）。
 	size_t i = 0;
-	while (i < s.size() && s[i] == L'\t') i++;
+	while (i < s.size() && (s[i] == L'\t' || s[i] == L' ')) i++;
 	return s.substr(i);
 }
 

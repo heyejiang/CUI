@@ -138,7 +138,7 @@
   <ItemGroup>
     <ClCompile Include="CodeGenerator.cpp" />
     <ClCompile Include="ComboBoxItemsEditorDialog.cpp" />
-    <ClCompile Include="CuiDesigner.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="Designer.cpp" />
     <ClCompile Include="DesignerCanvas.cpp" />
     <ClCompile Include="DesignerTypes.cpp" />

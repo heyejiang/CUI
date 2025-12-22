@@ -1,8 +1,8 @@
-﻿#include "DemoWindow.h"
+﻿#include "DemoWindow1.h"
 #pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
 int main()
 {
-	DemoWindow designer;
+	DemoWindow1 designer;
 	designer.Show();
 
 	while (1)

@@ -78,7 +78,7 @@ namespace
 				if (!TryParseHexNibble(hex[i + 1], lo)) return false;
 				b = (unsigned char)((hi << 4) | lo);
 				return true;
-			};
+				};
 			unsigned char a = 255, r = 0, g = 0, b = 0;
 			size_t off = 0;
 			if (hex.size() == 8)
@@ -252,10 +252,10 @@ PropertyGrid::PropertyGrid(int x, int y, int width, int height)
 {
 	this->BackColor = D2D1::ColorF(0.95f, 0.95f, 0.95f, 1.0f);
 	this->Boder = 1.0f;
-	
+
 	// 标题
 	_titleLabel = new Label(L"属性", 10, 10);
-	_titleLabel->Size = {width - 20, 25};
+	_titleLabel->Size = { width - 20, 25 };
 	_titleLabel->Font = new ::Font(L"Microsoft YaHei", 16.0f);
 	this->AddControl(_titleLabel);
 }
@@ -267,31 +267,31 @@ PropertyGrid::~PropertyGrid()
 void PropertyGrid::CreatePropertyItem(std::wstring propertyName, std::wstring value, int& yOffset)
 {
 	int width = this->Width;
-	
+
 	// 属性名标签
 	auto nameLabel = new Label(propertyName, 10, yOffset);
-	nameLabel->Size = {(width - 30) / 2, 20};
+	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
 	this->AddControl(nameLabel);
 	// 确保ParentForm已设置
 	nameLabel->ParentForm = this->ParentForm;
-	
+
 	// 值文本框
 	auto valueTextBox = new TextBox(L"", (width - 30) / 2 + 15, yOffset, (width - 30) / 2, 20);
 	valueTextBox->Text = value;
-	
+
 	// 文本改变事件
 	valueTextBox->OnTextChanged += [this, propertyName](Control* sender, std::wstring oldText, std::wstring newText) {
 		UpdatePropertyFromTextBox(propertyName, newText);
-	};
-	
+		};
+
 	this->AddControl(valueTextBox);
 	// 确保ParentForm已设置（关键！）
 	valueTextBox->ParentForm = this->ParentForm;
-	
+
 	auto item = new PropertyItem(propertyName, nameLabel, valueTextBox);
 	_items.push_back(item);
-	
+
 	yOffset += 25;
 }
 
@@ -301,7 +301,7 @@ void PropertyGrid::CreateBoolPropertyItem(std::wstring propertyName, bool value,
 
 	// 属性名标签
 	auto nameLabel = new Label(propertyName, 10, yOffset);
-	nameLabel->Size = {(width - 30) / 2, 20};
+	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
 	this->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
@@ -314,7 +314,7 @@ void PropertyGrid::CreateBoolPropertyItem(std::wstring propertyName, bool value,
 	valueCheckBox->OnMouseClick += [this, propertyName](Control* sender, MouseEventArgs) {
 		auto cb = (CheckBox*)sender;
 		UpdatePropertyFromBool(propertyName, cb->Checked);
-	};
+		};
 
 	this->AddControl(valueCheckBox);
 
@@ -354,7 +354,7 @@ void PropertyGrid::CreateEnumPropertyItem(std::wstring propertyName, const std::
 	valueCombo->OnSelectionChanged += [this, propertyName](Control* sender) {
 		auto cb = (ComboBox*)sender;
 		UpdatePropertyFromTextBox(propertyName, cb->Text);
-	};
+		};
 
 	this->AddControl(valueCombo);
 
@@ -385,7 +385,7 @@ void PropertyGrid::CreateFloatSliderPropertyItem(std::wstring propertyName, floa
 
 	slider->OnValueChanged += [this, propertyName](Control*, float, float newValue) {
 		UpdatePropertyFromFloat(propertyName, newValue);
-	};
+		};
 
 	this->AddControl(slider);
 
@@ -406,6 +406,10 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 			if (propertyName == L"Text")
 			{
 				_canvas->SetDesignedFormText(value);
+			}
+			else if (propertyName == L"HeadHeight")
+			{
+				_canvas->SetDesignedFormHeadHeight(std::stoi(value));
 			}
 			else if (propertyName == L"X")
 			{
@@ -438,7 +442,7 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 	if (!_currentControl->ControlInstance) return;
 
 	auto ctrl = _currentControl->ControlInstance;
-	
+
 	try
 	{
 		if (propertyName == L"Name")
@@ -670,7 +674,19 @@ void PropertyGrid::UpdatePropertyFromFloat(std::wstring propertyName, float valu
 
 void PropertyGrid::UpdatePropertyFromBool(std::wstring propertyName, bool value)
 {
-	if (!_currentControl || !_currentControl->ControlInstance) return;
+	// 未选中控件时：编辑“被设计窗体”属性
+	if (!_currentControl)
+	{
+		if (!_canvas) return;
+		if (propertyName == L"VisibleHead") _canvas->SetDesignedFormVisibleHead(value);
+		else if (propertyName == L"MinBox") _canvas->SetDesignedFormMinBox(value);
+		else if (propertyName == L"MaxBox") _canvas->SetDesignedFormMaxBox(value);
+		else if (propertyName == L"CloseBox") _canvas->SetDesignedFormCloseBox(value);
+		else if (propertyName == L"CenterTitle") _canvas->SetDesignedFormCenterTitle(value);
+		else if (propertyName == L"AllowResize") _canvas->SetDesignedFormAllowResize(value);
+		return;
+	}
+	if (!_currentControl->ControlInstance) return;
 	auto ctrl = _currentControl->ControlInstance;
 
 	if (propertyName == L"Enabled")
@@ -688,7 +704,7 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 {
 	Clear();
 	_currentControl = control;
-	
+
 	if (!control || !control->ControlInstance)
 	{
 		// 未选中控件时：展示被设计窗体属性
@@ -697,6 +713,13 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			_titleLabel->Text = L"属性 - 窗体";
 			int yOffset = 45;
 			CreatePropertyItem(L"Text", _canvas->GetDesignedFormText(), yOffset);
+			CreateBoolPropertyItem(L"VisibleHead", _canvas->GetDesignedFormVisibleHead(), yOffset);
+			CreatePropertyItem(L"HeadHeight", std::to_wstring(_canvas->GetDesignedFormHeadHeight()), yOffset);
+			CreateBoolPropertyItem(L"MinBox", _canvas->GetDesignedFormMinBox(), yOffset);
+			CreateBoolPropertyItem(L"MaxBox", _canvas->GetDesignedFormMaxBox(), yOffset);
+			CreateBoolPropertyItem(L"CloseBox", _canvas->GetDesignedFormCloseBox(), yOffset);
+			CreateBoolPropertyItem(L"CenterTitle", _canvas->GetDesignedFormCenterTitle(), yOffset);
+			CreateBoolPropertyItem(L"AllowResize", _canvas->GetDesignedFormAllowResize(), yOffset);
 			auto p = _canvas->GetDesignedFormLocation();
 			CreatePropertyItem(L"X", std::to_wstring(p.x), yOffset);
 			CreatePropertyItem(L"Y", std::to_wstring(p.y), yOffset);
@@ -709,22 +732,22 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 		_titleLabel->Text = L"属性";
 		return;
 	}
-	
+
 	_titleLabel->Text = L"属性 - " + control->Name;
-	
+
 	auto ctrl = control->ControlInstance;
 	int yOffset = 45;
-	
+
 	// 基本属性
 	CreatePropertyItem(L"Name", control->Name, yOffset);
 	CreatePropertyItem(L"Text", ctrl->Text, yOffset);
-	
+
 	// 位置和大小
 	CreatePropertyItem(L"X", std::to_wstring(ctrl->Location.x), yOffset);
 	CreatePropertyItem(L"Y", std::to_wstring(ctrl->Location.y), yOffset);
 	CreatePropertyItem(L"Width", std::to_wstring(ctrl->Size.cx), yOffset);
 	CreatePropertyItem(L"Height", std::to_wstring(ctrl->Size.cy), yOffset);
-	
+
 	// 状态
 	CreateBoolPropertyItem(L"Enabled", ctrl->Enable, yOffset);
 	CreateBoolPropertyItem(L"Visible", ctrl->Visible, yOffset);
@@ -799,7 +822,7 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			ComboBoxItemsEditorDialog dlg(cb);
 			dlg.ShowDialog(this->ParentForm->Handle);
 			cb->PostRender();
-		};
+			};
 		this->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
 		yOffset += 36;
@@ -814,7 +837,7 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			GridViewColumnsEditorDialog dlg(gv);
 			dlg.ShowDialog(this->ParentForm->Handle);
 			gv->PostRender();
-		};
+			};
 		this->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
 		yOffset += 36;
@@ -830,10 +853,10 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			// 如果删除页，需要同步移除该页下的 DesignerControl 以避免悬挂
 			dlg.OnBeforeDeletePage = [this](Control* page) {
 				if (_canvas && page) _canvas->RemoveDesignerControlsInSubtree(page);
-			};
+				};
 			dlg.ShowDialog(this->ParentForm->Handle);
 			tc->PostRender();
-		};
+			};
 		this->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
 		yOffset += 36;
@@ -849,10 +872,10 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			// 如果删除按钮控件，需要同步移除 DesignerControl
 			dlg.OnBeforeDeleteButton = [this](Control* btn) {
 				if (_canvas && btn) _canvas->RemoveDesignerControlsInSubtree(btn);
-			};
+				};
 			dlg.ShowDialog(this->ParentForm->Handle);
 			tb->PostRender();
-		};
+			};
 		this->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
 		yOffset += 36;
@@ -867,7 +890,7 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			TreeViewNodesEditorDialog dlg(tv);
 			dlg.ShowDialog(this->ParentForm->Handle);
 			tv->PostRender();
-		};
+			};
 		this->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
 		yOffset += 36;
@@ -882,12 +905,12 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			GridPanelDefinitionsEditorDialog dlg(gp);
 			dlg.ShowDialog(this->ParentForm->Handle);
 			gp->PostRender();
-		};
+			};
 		this->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
 		yOffset += 36;
 	}
-	
+
 	// 确保所有新创建的子控件的ParentForm都被正确设置
 	Control::SetChildrenParentForm(this, this->ParentForm);
 }
@@ -921,7 +944,7 @@ void PropertyGrid::Clear()
 			}
 		}
 	}
-	
+
 	// 移除所有属性项（保留标题）
 	for (auto item : _items)
 	{

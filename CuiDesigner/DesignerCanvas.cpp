@@ -54,9 +54,19 @@ DesignerCanvas::DesignerCanvas(int x, int y, int width, int height)
 	this->Boder = 2.0f;
 
 	_designSurface = new Panel(_designSurfaceOrigin.x, _designSurfaceOrigin.y, _designedFormSize.cx, _designedFormSize.cy);
-	_designSurface->BackColor = Colors::White;
-	_designSurface->Boder = 1.0f;
+	_designSurface->BackColor = Colors::WhiteSmoke;
+	_designSurface->Boder = 0.0f; // 边框由画布统一绘制
 	this->AddControl(_designSurface);
+
+	{
+		int top = DesignedClientTop();
+		int h = _designedFormSize.cy - top;
+		if (h < 0) h = 0;
+		_clientSurface = new Panel(0, top, _designedFormSize.cx, h);
+	}
+	_clientSurface->BackColor = Colors::White;
+	_clientSurface->Boder = 0.0f;
+	_designSurface->AddControl(_clientSurface);
 }
 
 DesignerCanvas::~DesignerCanvas()
@@ -81,9 +91,104 @@ void DesignerCanvas::Update()
 		{
 			_designSurface->Update();
 		}
+
+		// 绘制“仿真窗体”边框 + 标题栏（不影响控件布局，控件都在 clientSurface 内）
+		{
+			auto canvasAbs = this->AbsLocation;
+			auto formRect = GetDesignSurfaceRectInCanvas();
+			float fx = (float)(canvasAbs.x + formRect.left);
+			float fy = (float)(canvasAbs.y + formRect.top);
+			float fw = (float)(formRect.right - formRect.left);
+			float fh = (float)(formRect.bottom - formRect.top);
+
+			// 窗体边框
+			d2d->DrawRect(fx, fy, fw, fh, Colors::DimGrey, 1.0f);
+
+			// 标题栏
+			int headH = DesignedClientTop();
+			if (headH > 0)
+			{
+				D2D1_COLOR_F headBack = D2D1::ColorF(0.5f, 0.5f, 0.5f, 0.25f);
+				d2d->FillRect(fx, fy, fw, (float)headH, headBack);
+
+				// 标题文字
+				std::wstring title = _designedFormText.empty() ? L"Form" : _designedFormText;
+				float textY = fy + (float)((headH - 14) * 0.5f);
+				if (textY < fy) textY = fy;
+				float pad = 8.0f;
+				float btnW = (float)headH;
+				int buttonCount = (_designedFormMinBox ? 1 : 0) + (_designedFormMaxBox ? 1 : 0) + (_designedFormCloseBox ? 1 : 0);
+				float rightPad = (float)buttonCount * btnW;
+				if (_designedFormCenterTitle)
+				{
+					// 简化：居中绘制（不做精确测量，按经验偏移）
+					d2d->DrawString(title, fx + (fw - rightPad) * 0.5f - 30.0f, textY, Colors::Black, this->Font);
+				}
+				else
+				{
+					d2d->DrawString(title, fx + pad, textY, Colors::Black, this->Font);
+				}
+
+				// 右侧标题栏按钮（按 Form 的方式绘制图标）
+				float xRight = fx + fw;
+				auto drawBtnIcon = [&](bool enabled, int kind)
+				{
+					if (!enabled) return;
+					xRight -= btnW;
+
+					const float left = xRight;
+					const float top = fy;
+					const float bw = btnW;
+					const float bh = (float)headH;
+					const float s = (bw < bh) ? bw : bh;
+					const float cx = left + bw * 0.5f;
+					const float cy = top + bh * 0.5f;
+
+					const float icon = s * 0.42f;
+					const float half = icon * 0.5f;
+					float stroke = s * 0.08f;
+					if (stroke < 1.0f) stroke = 1.0f;
+
+					auto drawMinimize = [&]()
+						{
+							const float y = cy + half * 0.35f;
+							d2d->DrawLine(cx - half, y, cx + half, y, Colors::Black, stroke);
+						};
+					auto drawMaximize = [&]()
+						{
+							const float x = cx - half;
+							const float y = cy - half;
+							d2d->DrawRect(x, y, icon, icon, Colors::Black, stroke);
+						};
+					auto drawClose = [&]()
+						{
+							d2d->DrawLine(cx - half, cy - half, cx + half, cy + half, Colors::Black, stroke);
+							d2d->DrawLine(cx + half, cy - half, cx - half, cy + half, Colors::Black, stroke);
+						};
+
+					switch (kind)
+					{
+					case 0: // Minimize
+						drawMinimize();
+						break;
+					case 1: // Maximize
+						drawMaximize();
+						break;
+					case 2: // Close
+						drawClose();
+						break;
+					}
+				};
+
+				// 顺序与 Form 一致：Close / Max / Min
+				drawBtnIcon(_designedFormCloseBox, 2);
+				drawBtnIcon(_designedFormMaxBox, 1);
+				drawBtnIcon(_designedFormMinBox, 0);
+			}
+		}
 		// 选中边框/手柄/框选矩形：裁剪到设计面板
 		{
-			auto clip = GetDesignSurfaceRectInCanvas();
+			auto clip = GetClientSurfaceRectInCanvas();
 			RECT canvasRect{ 0,0,this->Width,this->Height };
 			auto finalClip = IntersectRectSafe(clip, canvasRect);
 			auto canvasAbs = this->AbsLocation;
@@ -256,7 +361,7 @@ void DesignerCanvas::BeginDragFromCurrentSelection(POINT mousePos)
 		auto* c = dc->ControlInstance;
 		DragStartItem it;
 		it.ControlInstance = c;
-		it.Parent = c->Parent ? c->Parent : _designSurface;
+		it.Parent = c->Parent ? c->Parent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
 		it.StartRectInCanvas = GetControlRectInCanvas(c);
 		it.StartLocation = c->Location;
 		it.StartMargin = c->Margin;
@@ -283,14 +388,14 @@ void DesignerCanvas::ApplyMoveDeltaToSelection(int dx, int dy)
 		newRect.top += dy;
 		newRect.bottom += dy;
 
-		// 根级控件：约束到设计面板；容器内控件不做全局 clamp（由容器布局决定）
-		if (_designSurface && it.ControlInstance->Parent == _designSurface)
+		// 根级控件：约束到客户区；容器内控件不做全局 clamp（由容器布局决定）
+		if (_clientSurface && it.ControlInstance->Parent == _clientSurface)
 		{
-			auto bounds = GetDesignSurfaceRectInCanvas();
+			auto bounds = GetClientSurfaceRectInCanvas();
 			newRect = ClampRectToBounds(newRect, bounds, true);
 		}
 
-		Control* parent = it.Parent ? it.Parent : _designSurface;
+		Control* parent = it.Parent ? it.Parent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
 		POINT newLocal = CanvasToContainerPoint({ newRect.left, newRect.top }, parent);
 		if (it.UsesRelativeMargin)
 		{
@@ -315,11 +420,11 @@ void DesignerCanvas::ApplyMoveDeltaToSelection(int dx, int dy)
 void DesignerCanvas::DrawGrid()
 {
 	if (!this->ParentForm) return;
-	if (!_designSurface) return;
+	if (!_clientSurface) return;
 	auto d2d = this->ParentForm->Render;
 	int gridSize = _gridSize;
 	auto canvasAbs = this->AbsLocation;
-	auto surfRect = GetDesignSurfaceRectInCanvas();
+	auto surfRect = GetClientSurfaceRectInCanvas();
 	auto surfAbsLeft = (float)(canvasAbs.x + surfRect.left);
 	auto surfAbsTop = (float)(canvasAbs.y + surfRect.top);
 	auto surfW = (float)(surfRect.right - surfRect.left);
@@ -363,10 +468,10 @@ void DesignerCanvas::AddHGuide(int yCanvas)
 RECT DesignerCanvas::ApplyMoveSnap(RECT desiredRectInCanvas, Control* referenceParent)
 {
 	ClearAlignmentGuides();
-	if (!_designSurface) return desiredRectInCanvas;
+	if (!_clientSurface) return desiredRectInCanvas;
 	if (!_snapToGrid && !_snapToGuides) return desiredRectInCanvas;
 
-	auto surfRect = GetDesignSurfaceRectInCanvas();
+	auto surfRect = GetClientSurfaceRectInCanvas();
 	int dx = 0;
 	int dy = 0;
 
@@ -472,10 +577,10 @@ RECT DesignerCanvas::ApplyMoveSnap(RECT desiredRectInCanvas, Control* referenceP
 RECT DesignerCanvas::ApplyResizeSnap(RECT desiredRectInCanvas, Control* referenceParent, DesignerControl::ResizeHandle handle)
 {
 	ClearAlignmentGuides();
-	if (!_designSurface) return desiredRectInCanvas;
+	if (!_clientSurface) return desiredRectInCanvas;
 	if (!_snapToGrid && !_snapToGuides) return desiredRectInCanvas;
 
-	auto surfRect = GetDesignSurfaceRectInCanvas();
+	auto surfRect = GetClientSurfaceRectInCanvas();
 
 	auto snapToGridEdge = [&](int value, int origin) {
 		if (_gridSize <= 1) return value;
@@ -599,9 +704,37 @@ RECT DesignerCanvas::GetDesignSurfaceRectInCanvas() const
 	return r;
 }
 
+RECT DesignerCanvas::GetClientSurfaceRectInCanvas() const
+{
+	if (!_designSurface || !_clientSurface)
+		return GetDesignSurfaceRectInCanvas();
+	auto ds = GetDesignSurfaceRectInCanvas();
+	RECT r;
+	r.left = ds.left + _clientSurface->Location.x;
+	r.top = ds.top + _clientSurface->Location.y;
+	r.right = r.left + _clientSurface->Size.cx;
+	r.bottom = r.top + _clientSurface->Size.cy;
+	return r;
+}
+
+void DesignerCanvas::UpdateClientSurfaceLayout()
+{
+	if (!_designSurface || !_clientSurface) return;
+	int top = DesignedClientTop();
+	int h = _designSurface->Size.cy - top;
+	if (h < 0) h = 0;
+	_clientSurface->Location = { 0, top };
+	_clientSurface->Size = { _designSurface->Size.cx, h };
+	if (auto* p = dynamic_cast<Panel*>(_clientSurface))
+	{
+		p->InvalidateLayout();
+		p->PerformLayout();
+	}
+}
+
 bool DesignerCanvas::IsPointInDesignSurface(POINT ptCanvas) const
 {
-	auto r = GetDesignSurfaceRectInCanvas();
+	auto r = GetClientSurfaceRectInCanvas();
 	return ptCanvas.x >= r.left && ptCanvas.x <= r.right && ptCanvas.y >= r.top && ptCanvas.y <= r.bottom;
 }
 
@@ -693,6 +826,7 @@ void DesignerCanvas::SetDesignedFormSize(SIZE s)
 			p->PerformLayout();
 		}
 	}
+	UpdateClientSurfaceLayout();
 	// 尺寸变化后：尽量把现有控件也约束到设计面板内
 	for (auto& dc : _designerControls)
 	{
@@ -704,15 +838,26 @@ void DesignerCanvas::SetDesignedFormSize(SIZE s)
 
 void DesignerCanvas::ClampControlToDesignSurface(Control* c)
 {
-	if (!c || !_designSurface) return;
-	// 仅约束“当前所在父容器”为设计面板的控件（根级控件）
-	if (c->Parent != _designSurface) return;
-	auto rCanvas = GetControlRectInCanvas(c);
-	auto bounds = GetDesignSurfaceRectInCanvas();
-	RECT clamped = ClampRectToBounds(rCanvas, bounds, true);
-	POINT newTopLeftCanvas{ clamped.left, clamped.top };
-	POINT newLocal = CanvasToContainerPoint(newTopLeftCanvas, _designSurface);
-	c->Location = newLocal;
+	if (!c) return;
+	if (_clientSurface && c->Parent == _clientSurface)
+	{
+		auto rCanvas = GetControlRectInCanvas(c);
+		auto bounds = GetClientSurfaceRectInCanvas();
+		RECT clamped = ClampRectToBounds(rCanvas, bounds, true);
+		POINT newTopLeftCanvas{ clamped.left, clamped.top };
+		POINT newLocal = CanvasToContainerPoint(newTopLeftCanvas, _clientSurface);
+		c->Location = newLocal;
+		return;
+	}
+	if (_designSurface && c->Parent == _designSurface)
+	{
+		auto rCanvas = GetControlRectInCanvas(c);
+		auto bounds = GetDesignSurfaceRectInCanvas();
+		RECT clamped = ClampRectToBounds(rCanvas, bounds, true);
+		POINT newTopLeftCanvas{ clamped.left, clamped.top };
+		POINT newLocal = CanvasToContainerPoint(newTopLeftCanvas, _designSurface);
+		c->Location = newLocal;
+	}
 }
 
 void DesignerCanvas::DrawSelectionHandles(std::shared_ptr<DesignerControl> dc)
@@ -985,7 +1130,7 @@ void DesignerCanvas::TryReparentSelectedAfterDrag()
 {
 	if (!_selectedControl || !_selectedControl->ControlInstance) return;
 	auto* moving = _selectedControl->ControlInstance;
-	if (!_designSurface) return;
+	if (!_designSurface || !_clientSurface) return;
 
 	// ToolBar 限制：只允许 Button
 	auto movingType = moving->Type();
@@ -996,11 +1141,11 @@ void DesignerCanvas::TryReparentSelectedAfterDrag()
 	Control* rawContainer = FindBestContainerAtPoint(center, moving);
 	Control* container = NormalizeContainerForDrop(rawContainer);
 	if (!container) {
-		// 落在容器之外：归为根级（设计期挂到 designSurface 下，但 DesignerParent 仍为 nullptr）
+		// 落在容器之外：归为根级（客户区），DesignerParent 仍为 nullptr
 		POINT newCanvasPos{ r.left, r.top };
-		POINT newLocal = CanvasToContainerPoint(newCanvasPos, _designSurface);
+		POINT newLocal = CanvasToContainerPoint(newCanvasPos, _clientSurface);
 		if (moving->Parent) moving->Parent->RemoveControl(moving);
-		_designSurface->AddControl(moving);
+		_clientSurface->AddControl(moving);
 		moving->Location = newLocal;
 		_selectedControl->DesignerParent = nullptr;
 		ClampControlToDesignSurface(moving);
@@ -1232,10 +1377,10 @@ bool DesignerCanvas::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 		// Ctrl+A：全选当前容器
 		if (wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000))
 		{
-			Control* requiredParent = _designSurface;
+			Control* requiredParent = _clientSurface ? (Control*)_clientSurface : (Control*)_designSurface;
 			if (_selectedControl && _selectedControl->ControlInstance)
-				requiredParent = _selectedControl->ControlInstance->Parent ? _selectedControl->ControlInstance->Parent : _designSurface;
-			if (!requiredParent) requiredParent = _designSurface;
+				requiredParent = _selectedControl->ControlInstance->Parent ? _selectedControl->ControlInstance->Parent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
+			if (!requiredParent) requiredParent = _clientSurface ? (Control*)_clientSurface : (Control*)_designSurface;
 
 			ClearSelection();
 			std::shared_ptr<DesignerControl> first = nullptr;
@@ -1395,7 +1540,7 @@ bool DesignerCanvas::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 		{
 			int rawDx = mousePos.x - _dragStartPoint.x;
 			int rawDy = mousePos.y - _dragStartPoint.y;
-			Control* refParent = (_selectedControl && _selectedControl->ControlInstance) ? _selectedControl->ControlInstance->Parent : _designSurface;
+			Control* refParent = (_selectedControl && _selectedControl->ControlInstance) ? _selectedControl->ControlInstance->Parent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
 			RECT desired = _dragStartRectInCanvas;
 			desired.left += rawDx; desired.right += rawDx;
 			desired.top += rawDy; desired.bottom += rawDy;
@@ -1440,18 +1585,18 @@ bool DesignerCanvas::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 			if (newRect.right - newRect.left < minSize) newRect.right = newRect.left + minSize;
 			if (newRect.bottom - newRect.top < minSize) newRect.bottom = newRect.top + minSize;
 
-			Control* refParent = _selectedControl->ControlInstance->Parent ? _selectedControl->ControlInstance->Parent : _designSurface;
+			Control* refParent = _selectedControl->ControlInstance->Parent ? _selectedControl->ControlInstance->Parent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
 			newRect = ApplyResizeSnap(newRect, refParent, _resizeHandle);
 
 			// 再次最小尺寸限制（吸附后可能破坏）
 			if (newRect.right - newRect.left < minSize) newRect.right = newRect.left + minSize;
 			if (newRect.bottom - newRect.top < minSize) newRect.bottom = newRect.top + minSize;
-			// 约束到设计面板
-			auto bounds = GetDesignSurfaceRectInCanvas();
+			// 约束到客户区（不允许进入标题栏）
+			auto bounds = GetClientSurfaceRectInCanvas();
 			newRect = ClampRectToBounds(newRect, bounds, false);
 
 			auto* moving = _selectedControl->ControlInstance;
-			Control* parent = moving->Parent ? moving->Parent : _designSurface;
+			Control* parent = moving->Parent ? moving->Parent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
 			POINT newLocal = CanvasToContainerPoint({ newRect.left, newRect.top }, parent);
 			moving->Location = newLocal;
 			moving->Size = { newRect.right - newRect.left, newRect.bottom - newRect.top };
@@ -1557,7 +1702,7 @@ void DesignerCanvas::AddControlToCanvas(UIClass type, POINT canvasPos)
 {
 	Control* newControl = nullptr;
 	std::wstring typeName;
-	if (!_designSurface) return;
+	if (!_designSurface || !_clientSurface) return;
 	if (!IsPointInDesignSurface(canvasPos)) return;
 	
 	// 在点击位置创建控件（左上角对齐，稍微偏移避免手感奇怪）
@@ -1795,11 +1940,11 @@ void DesignerCanvas::AddControlToCanvas(UIClass type, POINT canvasPos)
 		}
 		else
 		{
-			// 根级：属于窗体，但设计期挂在 designSurface 下以获得裁剪/可视边界
-			_designSurface->AddControl(newControl);
-			POINT local = CanvasToContainerPoint({ centerX, centerY }, _designSurface);
+			// 根级：属于窗体客户区
+			_clientSurface->AddControl(newControl);
+			POINT local = CanvasToContainerPoint({ centerX, centerY }, _clientSurface);
 			newControl->Location = local;
-			// 约束初始位置到设计面板
+			// 约束初始位置到客户区
 			ClampControlToDesignSurface(newControl);
 		}
 		
@@ -1828,7 +1973,7 @@ void DesignerCanvas::DeleteSelectedControl()
 	{
 		if (!dc || !dc->ControlInstance) continue;
 		// 安全：不允许删除设计面板本身
-		if (dc->ControlInstance == _designSurface) continue;
+		if (dc->ControlInstance == _designSurface || dc->ControlInstance == _clientSurface) continue;
 		toDelete.push_back(dc->ControlInstance);
 	}
 
@@ -1848,13 +1993,13 @@ void DesignerCanvas::DeleteSelectedControl()
 
 void DesignerCanvas::ClearCanvas()
 {
-	if (_designSurface)
+	if (_clientSurface)
 	{
-		// 清空设计面板内的所有控件（递归释放）
-		while (_designSurface->Count > 0)
+		// 清空客户区内的所有控件（递归释放）
+		while (_clientSurface->Count > 0)
 		{
-			auto c = _designSurface->operator[](_designSurface->Count - 1);
-			_designSurface->RemoveControl(c);
+			auto c = _clientSurface->operator[](_clientSurface->Count - 1);
+			_clientSurface->RemoveControl(c);
 			DeleteControlRecursive(c);
 		}
 	}
@@ -2192,7 +2337,14 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 		root["form"] = Json{
 			{"text", ToUtf8(_designedFormText)},
 			{"size", Json{{"w", _designedFormSize.cx}, {"h", _designedFormSize.cy}}},
-			{"location", Json{{"x", _designedFormLocation.x}, {"y", _designedFormLocation.y}}}
+			{"location", Json{{"x", _designedFormLocation.x}, {"y", _designedFormLocation.y}}},
+			{"visibleHead", _designedFormVisibleHead},
+			{"headHeight", _designedFormHeadHeight},
+			{"minBox", _designedFormMinBox},
+			{"maxBox", _designedFormMaxBox},
+			{"closeBox", _designedFormCloseBox},
+			{"centerTitle", _designedFormCenterTitle},
+			{"allowResize", _designedFormAllowResize}
 		};
 
 		// 防御：Name 必须唯一，否则 parent 引用会歧义，文件将无法可靠加载
@@ -2271,7 +2423,7 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 				}
 			}
 
-			Control* runtimeParent = dc->DesignerParent ? dc->DesignerParent : _designSurface;
+			Control* runtimeParent = dc->DesignerParent ? dc->DesignerParent : (_clientSurface ? (Control*)_clientSurface : (Control*)_designSurface);
 			item["order"] = GetChildIndex(runtimeParent, c);
 
 			Json props;
@@ -2483,6 +2635,14 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 		{
 			auto& form = root["form"];
 			_designedFormText = FromUtf8(form.value("text", std::string()));
+			_designedFormVisibleHead = form.value("visibleHead", _designedFormVisibleHead);
+			_designedFormHeadHeight = form.value("headHeight", _designedFormHeadHeight);
+			if (_designedFormHeadHeight < 0) _designedFormHeadHeight = 0;
+			_designedFormMinBox = form.value("minBox", _designedFormMinBox);
+			_designedFormMaxBox = form.value("maxBox", _designedFormMaxBox);
+			_designedFormCloseBox = form.value("closeBox", _designedFormCloseBox);
+			_designedFormCenterTitle = form.value("centerTitle", _designedFormCenterTitle);
+			_designedFormAllowResize = form.value("allowResize", _designedFormAllowResize);
 			if (form.contains("size") && form["size"].is_object())
 			{
 				SIZE s;
@@ -2495,6 +2655,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 				_designedFormLocation.x = form["location"].value("x", 100);
 				_designedFormLocation.y = form["location"].value("y", 100);
 			}
+			UpdateClientSurfaceLayout();
 		}
 
 		struct Pending
@@ -2813,7 +2974,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 			auto dc = dcOf[it->name];
 			if (!dc || !dc->ControlInstance) return;
 			auto* c = dc->ControlInstance;
-			if (!runtimeParent) runtimeParent = _designSurface;
+			if (!runtimeParent) runtimeParent = _clientSurface ? (Control*)_clientSurface : (Control*)_designSurface;
 			if (!runtimeParent) return;
 			if (runtimeParent->Type() == UIClass::UI_ToolBar)
 			{
@@ -2860,7 +3021,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 		// attach roots first
 		for (auto* it : roots)
 		{
-			attachOne(it, _designSurface, nullptr);
+			attachOne(it, _clientSurface ? (Control*)_clientSurface : (Control*)_designSurface, nullptr);
 			attachChildren(it->name, dcOf[it->name]->ControlInstance, dcOf[it->name]->ControlInstance);
 			if (it->type == UIClass::UI_TabControl)
 			{
@@ -2895,6 +3056,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 				p->PerformLayout();
 			}
 		}
+		UpdateClientSurfaceLayout();
 		for (auto& dc : _designerControls)
 		{
 			if (!dc || !dc->ControlInstance) continue;

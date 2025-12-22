@@ -8,9 +8,17 @@ class DesignerCanvas : public Panel
 {
 private:
 	Panel* _designSurface = nullptr;
+	Panel* _clientSurface = nullptr;
 	std::wstring _designedFormText = L"Form";
 	SIZE _designedFormSize = { 800, 600 };
 	POINT _designedFormLocation = { 100, 100 };
+	bool _designedFormVisibleHead = true;
+	int _designedFormHeadHeight = 24;
+	bool _designedFormMinBox = true;
+	bool _designedFormMaxBox = true;
+	bool _designedFormCloseBox = true;
+	bool _designedFormCenterTitle = true;
+	bool _designedFormAllowResize = true;
 	POINT _designSurfaceOrigin = { 20, 20 };
 
 	// 网格/吸附/参考线
@@ -59,9 +67,12 @@ private:
 	void DrawSelectionHandles(std::shared_ptr<DesignerControl> dc);
 	void DrawGrid();
 	RECT GetDesignSurfaceRectInCanvas() const;
+	RECT GetClientSurfaceRectInCanvas() const;
 	bool IsPointInDesignSurface(POINT ptCanvas) const;
 	RECT ClampRectToBounds(RECT r, const RECT& bounds, bool keepSize) const;
 	bool TryHandleTabHeaderClick(POINT ptCanvas);
+	int DesignedClientTop() const { return (_designedFormVisibleHead && _designedFormHeadHeight > 0) ? _designedFormHeadHeight : 0; }
+	void UpdateClientSurfaceLayout();
 	
 	std::shared_ptr<DesignerControl> HitTestControl(POINT pt);
 	CursorKind GetResizeCursor(DesignerControl::ResizeHandle handle);
@@ -90,6 +101,20 @@ public:
 	void SetDesignedFormSize(SIZE s);
 	POINT GetDesignedFormLocation() const { return _designedFormLocation; }
 	void SetDesignedFormLocation(POINT p) { _designedFormLocation = p; }
+	bool GetDesignedFormVisibleHead() const { return _designedFormVisibleHead; }
+	void SetDesignedFormVisibleHead(bool v) { _designedFormVisibleHead = v; UpdateClientSurfaceLayout(); this->PostRender(); }
+	int GetDesignedFormHeadHeight() const { return _designedFormHeadHeight; }
+	void SetDesignedFormHeadHeight(int h) { _designedFormHeadHeight = h; if (_designedFormHeadHeight < 0) _designedFormHeadHeight = 0; UpdateClientSurfaceLayout(); this->PostRender(); }
+	bool GetDesignedFormMinBox() const { return _designedFormMinBox; }
+	void SetDesignedFormMinBox(bool v) { _designedFormMinBox = v; this->PostRender(); }
+	bool GetDesignedFormMaxBox() const { return _designedFormMaxBox; }
+	void SetDesignedFormMaxBox(bool v) { _designedFormMaxBox = v; this->PostRender(); }
+	bool GetDesignedFormCloseBox() const { return _designedFormCloseBox; }
+	void SetDesignedFormCloseBox(bool v) { _designedFormCloseBox = v; this->PostRender(); }
+	bool GetDesignedFormCenterTitle() const { return _designedFormCenterTitle; }
+	void SetDesignedFormCenterTitle(bool v) { _designedFormCenterTitle = v; this->PostRender(); }
+	bool GetDesignedFormAllowResize() const { return _designedFormAllowResize; }
+	void SetDesignedFormAllowResize(bool v) { _designedFormAllowResize = v; this->PostRender(); }
 	void ClampControlToDesignSurface(Control* c);
 
 	// 设计文件（用于保存/加载设计进度）

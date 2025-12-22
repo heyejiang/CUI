@@ -56,11 +56,18 @@ static bool IsContainerType(UIClass t)
 }
 
 CodeGenerator::CodeGenerator(std::wstring className, const std::vector<std::shared_ptr<DesignerControl>>& controls,
-	std::wstring formText, SIZE formSize, POINT formLocation)
-	: _className(className), _controls(controls), _formText(formText), _formSize(formSize), _formLocation(formLocation)
+	std::wstring formText, SIZE formSize, POINT formLocation,
+	bool formVisibleHead, int formHeadHeight,
+	bool formMinBox, bool formMaxBox, bool formCloseBox,
+	bool formCenterTitle, bool formAllowResize)
+	: _className(className), _controls(controls), _formText(formText), _formSize(formSize), _formLocation(formLocation),
+	_formVisibleHead(formVisibleHead), _formHeadHeight(formHeadHeight),
+	_formMinBox(formMinBox), _formMaxBox(formMaxBox), _formCloseBox(formCloseBox),
+	_formCenterTitle(formCenterTitle), _formAllowResize(formAllowResize)
 {
 	if (_formSize.cx <= 0) _formSize.cx = 800;
 	if (_formSize.cy <= 0) _formSize.cy = 600;
+	if (_formHeadHeight < 0) _formHeadHeight = 0;
 	// 防御：避免生成一个极端位置导致窗体不可见
 	if (_formLocation.x < -10000) _formLocation.x = -10000;
 	if (_formLocation.y < -10000) _formLocation.y = -10000;
@@ -547,6 +554,32 @@ std::string CodeGenerator::GenerateControlCommonProperties(const std::shared_ptr
 			code << indentStr << name << "->UnderMouseItemBackColor = " << ColorToString(tv->UnderMouseItemBackColor) << ";\n";
 		if (neq(tv->SelectedForeColor, defSelFore))
 			code << indentStr << name << "->SelectedForeColor = " << ColorToString(tv->SelectedForeColor) << ";\n";
+
+		// TreeView nodes
+		if (tv->Root && tv->Root->Children.Count > 0)
+		{
+			code << indentStr << "// TreeView nodes\n";
+			code << indentStr << "for (auto n : " << name << "->Root->Children) delete n;\n";
+			code << indentStr << name << "->Root->Children.Clear();\n";
+
+			int nodeAutoId = 0;
+			auto emit = [&](auto&& self, List<TreeNode*>& nodes, const std::string& parentExpr, int depth) -> void
+			{
+				for (auto* n : nodes)
+				{
+					if (!n) continue;
+					std::string ind(indent + depth, '\t');
+					std::string var = name + "_node" + std::to_string(++nodeAutoId);
+					code << ind << "auto* " << var << " = new TreeNode(L\"" << EscapeWStringLiteral(n->Text) << "\");\n";
+					if (n->Expand)
+						code << ind << var << "->Expand = true;\n";
+					code << ind << parentExpr << "->Children.push_back(" << var << ");\n";
+					if (n->Children.Count > 0)
+						self(self, n->Children, var, depth + 1);
+				}
+			};
+			emit(emit, tv->Root->Children, name + "->Root", 0);
+		}
 	}
 
 	// GridView columns
@@ -705,6 +738,15 @@ std::string CodeGenerator::GenerateCpp()
 		<< _formLocation.x << ", " << _formLocation.y << " }, SIZE{ "
 		<< _formSize.cx << ", " << _formSize.cy << " })\n";
 	cpp << "{\n\n";
+
+	cpp << "\t// 窗体属性（标题栏/按钮/缩放）\n";
+	cpp << "\tthis->VisibleHead = " << (_formVisibleHead ? "true" : "false") << ";\n";
+	cpp << "\tthis->HeadHeight = " << _formHeadHeight << ";\n";
+	cpp << "\tthis->MinBox = " << (_formMinBox ? "true" : "false") << ";\n";
+	cpp << "\tthis->MaxBox = " << (_formMaxBox ? "true" : "false") << ";\n";
+	cpp << "\tthis->CloseBox = " << (_formCloseBox ? "true" : "false") << ";\n";
+	cpp << "\tthis->CenterTitle = " << (_formCenterTitle ? "true" : "false") << ";\n";
+	cpp << "\tthis->AllowResize = " << (_formAllowResize ? "true" : "false") << ";\n\n";
 	
 	cpp << "\t// 创建控件\n";
 
