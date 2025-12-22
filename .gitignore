@@ -106,3 +106,5 @@ dkms.conf
 /CUI/Release
 /CuiDesigner/x64
 /CUITest/x64/Release
+/CuiDesigner/Designer/x64/Debug
+/CUITest/x64/Debug

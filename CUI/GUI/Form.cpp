@@ -269,6 +269,8 @@ void Form::ExecuteCaptionButton(CaptionButtonKind kind)
 		ShowWindow(this->Handle, SW_MINIMIZE);
 		break;
 	case CaptionButtonKind::Maximize:
+		if (!this->AllowResize)
+			break;
 		if (IsZoomed(this->Handle))
 			ShowWindow(this->Handle, SW_RESTORE);
 		else
@@ -287,7 +289,9 @@ void Form::Invalidate(bool immediate)
 	if (!this->Handle) return;
 	this->ControlChanged = true;
 	::InvalidateRect(this->Handle, NULL, FALSE);
-	if (immediate)
+	// When the window is disabled/hidden (e.g. during a modal dialog), forcing
+	// UpdateWindow can create excessive WM_PAINT churn. Let the system schedule paint.
+	if (immediate && ::IsWindowVisible(this->Handle) && ::IsWindowEnabled(this->Handle))
 		::UpdateWindow(this->Handle);
 }
 
@@ -296,7 +300,7 @@ void Form::Invalidate(const RECT& rc, bool immediate)
 	if (!this->Handle) return;
 	this->ControlChanged = true;
 	::InvalidateRect(this->Handle, &rc, FALSE);
-	if (immediate)
+	if (immediate && ::IsWindowVisible(this->Handle) && ::IsWindowEnabled(this->Handle))
 		::UpdateWindow(this->Handle);
 }
 
@@ -439,6 +443,37 @@ GET_CPP(Form, bool, Visible)
 SET_CPP(Form, bool, Visible)
 {
 	ShowWindow(this->Handle, value ? SW_SHOW : SW_HIDE);
+}
+
+GET_CPP(Form, bool, AllowResize)
+{
+	return this->_allowResize;
+}
+
+SET_CPP(Form, bool, AllowResize)
+{
+	if (this->_allowResize == value)
+		return;
+
+	this->_allowResize = value;
+	if (!value)
+	{
+		// 关闭可调整大小时，自动隐藏最大化按钮
+		this->_maxBoxBeforeAllowResize = this->MaxBox;
+		this->MaxBox = false;
+
+		// 如果当前已最大化，恢复成普通窗口
+		if (this->Handle && IsZoomed(this->Handle))
+			ShowWindow(this->Handle, SW_RESTORE);
+	}
+	else
+	{
+		// 重新允许调整大小时，恢复之前的最大化按钮状态
+		this->MaxBox = this->_maxBoxBeforeAllowResize;
+	}
+
+	ClearCaptionStates();
+	Invalidate(TitleBarRectClient(), true);
 }
 
 GET_CPP(Form, bool, ShowInTaskBar)
@@ -1548,6 +1583,9 @@ LRESULT CustomFrameHitTest(HWND _hWnd, WPARAM wParam, LPARAM lParam, int caption
 }
 LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	//char buffer[256];
+	//sprintf_s(buffer, 256, "Form Window Message: 0x%08X\r\n", message);
+	//OutputDebugStringA(buffer);
 	Form* form = (Form*)(GetWindowLongPtrW(hWnd, GWLP_USERDATA) ^ 0xFFFFFFFFFFFFFFFF);
 	if ((ULONG64)form != 0xFFFFFFFFFFFFFFFF && Application::Forms.ContainsKey(form->Handle))
 	{
@@ -1593,16 +1631,10 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 				if (!hasVisibleWebBrowser && form->ForegroundControl)
 					checkWebBrowser(form->ForegroundControl);
 				
-				// 如果有 WebBrowser 或 ControlChanged，则更新
+				// 如果有 WebBrowser 或 ControlChanged，则更新。
+				// 否则（无变化时）只需验证区域（BeginPaint/EndPaint 已完成验证），不应强制渲染。
 				if (hasVisibleWebBrowser || form->ControlChanged || !form->_hasRenderedOnce)
-				{
 					form->UpdateDirtyRect(ps.rcPaint, true);
-				}
-				else if (form->_hasRenderedOnce)
-				{
-					// 无 WebBrowser 且无变化时，只验证区域
-					form->UpdateDirtyRect(ps.rcPaint, true);
-				}
 			}
 			EndPaint(hWnd, &ps);
 			return 0;
@@ -1635,6 +1667,15 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 					CaptionButtonKind k{};
 					if (form->HitTestCaptionButtons(ptClient, k))
 						return HTCLIENT;
+				}
+				if (!form->AllowResize)
+				{
+					// 禁用边缘/角落 resize，只保留标题栏拖动与正常客户区
+					if (lr == HTLEFT || lr == HTRIGHT || lr == HTTOP || lr == HTBOTTOM ||
+						lr == HTTOPLEFT || lr == HTTOPRIGHT || lr == HTBOTTOMLEFT || lr == HTBOTTOMRIGHT)
+					{
+						return HTCLIENT;
+					}
 				}
 				if (lr != HTCAPTION)
 				{

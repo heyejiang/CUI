@@ -52,6 +52,8 @@ private:
 	POINT _Location_INIT;
 	SIZE _Size_INTI;
 	std::wstring _text;
+	bool _allowResize = true;
+	bool _maxBoxBeforeAllowResize = true;
 	enum class CaptionButtonKind : uint8_t { Minimize, Maximize, Close };
 	enum class CaptionButtonState : uint8_t { None, Hover, Pressed };
 	CaptionButtonState _capMinState = CaptionButtonState::None;
@@ -89,11 +91,11 @@ private:
 	CursorKind QueryCursorAt(POINT mouseClient, POINT contentMouse);
 	class Control* HitTestControlAt(POINT contentMouse);
 	static HCURSOR GetSystemCursor(CursorKind kind);
-	
+
 	// 布局支持
 	class LayoutEngine* _layoutEngine = nullptr;
 	bool _needsLayout = false;
-	
+
 public:
 	FormMouseWheelEvent OnMouseWheel = FormMouseWheelEvent();
 	FormMouseMoveEvent OnMouseMove = FormMouseMoveEvent();
@@ -116,7 +118,7 @@ public:
 	FormDropFileEvent OnDropFile = FormDropFileEvent();
 	FormClosingEvent OnFormClosing = FormClosingEvent();
 	FormClosedEvent OnFormClosed = FormClosedEvent();
-	
+
 	CommandEvent OnCommand;
 
 	HWND Handle = NULL;
@@ -167,6 +169,10 @@ public:
 	GET(bool, Visible);
 	SET(bool, Visible);
 
+	PROPERTY(bool, AllowResize);
+	GET(bool, AllowResize);
+	SET(bool, AllowResize);
+
 	HICON Icon = NULL;
 	Form(std::wstring _text = L"NativeWindow", POINT _location = { 0,0 }, SIZE _size = { 600,400 });
 	~Form();
@@ -195,10 +201,10 @@ public:
 		this->Controls.Add(c);
 		c->Parent = NULL;
 		c->ParentForm = this;
-		
+
 		// 递归设置所有子控件的ParentForm
 		Control::SetChildrenParentForm(c, this);
-		
+
 		// 主菜单单独管理
 		if (c->Type() == UIClass::UI_Menu)
 		{
@@ -219,12 +225,12 @@ public:
 	virtual void RenderImage();
 	D2D1_RECT_F ChildRect();
 	Control* LastChild();
-	
+
 	// 布局管理
 	void SetLayoutEngine(class LayoutEngine* engine);
 	void PerformLayout();
 	void InvalidateLayout() { _needsLayout = true; }
-	
+
 	static bool DoEvent();
 	static bool WaiteEvent();
 	static LRESULT CALLBACK WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);

@@ -8,13 +8,7 @@
 #include <cstring>
 #include <algorithm>
 
-extern const char* icon0;
-extern const char* icon1;
-extern const char* icon2;
-extern const char* icon3;
-extern const char* icon4;
-extern const char* _4_ico;
-extern const char* _9_ico;
+const char* _ico = R"(<svg t="1766410686901" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5087" data-darkreader-inline-fill="" width="200" height="200"><path d="M496 895.2L138.4 771.2c-6.4-2.4-10.4-8-10.4-15.2V287.2l368 112v496z m32 0l357.6-124c6.4-2.4 10.4-8 10.4-15.2V287.2l-368 112v496z m-400-640l384 112 384-112-379.2-125.6c-3.2-0.8-7.2-0.8-10.4 0L128 255.2z" p-id="5088" fill="#1afa29" data-darkreader-inline-fill="" style="--darkreader-inline-fill: var(--darkreader-background-1afa29, #11ce4a);"></path></svg>)";
 
 static ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics1* g, const char* data)
 {
@@ -118,24 +112,7 @@ static ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics1* g, const char* data)
 
 static const char* GetToolBoxSvg(UIClass type)
 {
-	switch (type)
-	{
-	case UIClass::UI_Button:
-		return icon1;
-	case UIClass::UI_Label:
-		return icon2;
-	case UIClass::UI_TextBox:
-	case UIClass::UI_PasswordBox:
-		return icon0;
-	case UIClass::UI_PictureBox:
-		return _4_ico;
-	case UIClass::UI_GridView:
-		return icon4;
-	case UIClass::UI_WebBrowser:
-		return _9_ico;
-	default:
-		return icon3;
-	}
+	return _ico;
 }
 
 ToolBoxItem::~ToolBoxItem()
@@ -216,7 +193,7 @@ ToolBox::ToolBox(int x, int y, int width, int height)
 	
 	for (const auto& ctrl : controls)
 	{
-		auto item = new ToolBoxItem(ctrl.DisplayName, ctrl.Type, GetToolBoxSvg(ctrl.Type), 10, yOffset, width - 20, 34);
+		auto item = new ToolBoxItem(ctrl.DisplayName, ctrl.Type, GetToolBoxSvg(ctrl.Type), 10, yOffset, width - 25, 34);
 		item->Round = 0.18f;
 		
 		// 点击事件

@@ -1,35 +1,14 @@
 #include "Designer.h"
 #include <Windows.h>
 #include <commdlg.h>
+#include <commctrl.h>
 
 namespace
 {
-	class SimpleModalMessageForm : public Form
-	{
-	public:
-		SimpleModalMessageForm(const std::wstring& caption, const std::wstring& text)
-			: Form(caption, { 0, 0 }, { 520, 240 })
-		{
-			this->BackColor = D2D1::ColorF(0.95f, 0.95f, 0.95f, 1.0f);
-
-			auto label = new Label(text, 20, 20);
-			label->Size = { 480, 140 };
-			label->Font = new ::Font(L"Microsoft YaHei", 14.0f);
-			this->AddControl(label);
-
-			auto ok = new Button(L"确定", 210, 175, 100, 35);
-			ok->Round = 4.0f;
-			ok->OnMouseClick += [this](Control*, MouseEventArgs) {
-				this->Close();
-			};
-			this->AddControl(ok);
-		}
-	};
 
 	static void ShowModalMessage(Form* ownerForm, const std::wstring& caption, const std::wstring& text)
 	{
-		SimpleModalMessageForm dlg(caption, text);
-		dlg.ShowDialog(ownerForm ? ownerForm->Handle : NULL);
+		::MessageBoxW(ownerForm->Handle, text.c_str(), caption.c_str(), MB_OK | MB_SETFOREGROUND);
 	}
 }
 
@@ -64,7 +43,7 @@ void Designer::InitializeComponents()
 	int btnX = 10;
 	
 	_btnNew = new Button(L"新建", btnX, btnY, btnWidth, btnHeight);
-	_btnNew->Round = 4.0f;
+	_btnNew->Round = 0.5f;
 	_btnNew->OnMouseClick += [this](Control* sender, MouseEventArgs e) {
 		OnNewClick();
 	};
@@ -72,7 +51,7 @@ void Designer::InitializeComponents()
 	btnX += btnWidth + 10;
 	
 	_btnExport = new Button(L"导出代码", btnX, btnY, btnWidth + 20, btnHeight);
-	_btnExport->Round = 4.0f;
+	_btnExport->Round = 0.5f;
 	_btnExport->OnMouseClick += [this](Control* sender, MouseEventArgs e) {
 		OnExportClick();
 	};
@@ -80,7 +59,7 @@ void Designer::InitializeComponents()
 	btnX += btnWidth + 30;
 	
 	_btnDelete = new Button(L"删除", btnX, btnY, btnWidth, btnHeight);
-	_btnDelete->Round = 4.0f;
+	_btnDelete->Round = 0.5f;
 	_btnDelete->BackColor = Colors::IndianRed;
 	_btnDelete->OnMouseClick += [this](Control* sender, MouseEventArgs e) {
 		OnDeleteClick();

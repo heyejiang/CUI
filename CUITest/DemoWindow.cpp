@@ -193,8 +193,7 @@ void DemoWindow::sw2_OnMouseClick(class Control* sender, MouseEventArgs e)
 
 void DemoWindow::iconButton_OnMouseClick(class Control* sender, MouseEventArgs e)
 {
-	(void)sender;
-	(void)e;
+	MessageBoxW(this->Handle, L"clicked...", L"title", MB_OK);
 }
 
 void DemoWindow::picturebox1_OnDropFile(class Control* sender, List<std::wstring> files)
@@ -217,7 +216,7 @@ void DemoWindow::picturebox1_OnDropFile(class Control* sender, List<std::wstring
 		sender->PostRender();
 	}
 }
-DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
+DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 800,640 })
 {
 	bmps[0] = ToBitmapFromSvg(this->Render, _0_ico);
 	bmps[1] = ToBitmapFromSvg(this->Render, _1_ico);
