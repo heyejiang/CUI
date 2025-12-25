@@ -386,11 +386,9 @@ bool Control::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof
 	if (!this->Enable || !this->Visible) return true;
 	if (WM_LBUTTONDOWN == message)
 	{
-		if (this->ParentForm->Selected && this->ParentForm->Selected != this)
+		if (this->ParentForm)
 		{
-			auto se = this->ParentForm->Selected;
-			this->ParentForm->Selected = this;
-			se->PostRender();
+			this->ParentForm->SetSelectedControl(this, true);
 		}
 	}
 	switch (message)
@@ -431,7 +429,8 @@ bool Control::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof
 	{
 		if (WM_LBUTTONDOWN == message)
 		{
-			this->ParentForm->Selected = this;
+			if (this->ParentForm)
+				this->ParentForm->SetSelectedControl(this, false);
 		}
 		MouseEventArgs event_obj = MouseEventArgs(FromParamToMouseButtons(message), 0, xof, yof, HIWORD(wParam));
 		this->OnMouseDown(this, event_obj);

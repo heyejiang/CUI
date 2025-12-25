@@ -104,6 +104,7 @@ typedef Event<void(class Control*, wchar_t)> CharInputEvent;
 typedef Event<void(class Control*)> GotFocusEvent;
 typedef Event<void(class Control*)> LostFocusEvent;
 typedef Event<void(class Control*, List<std::wstring>)> DropFileEvent;
+typedef Event<void(class Control*, std::wstring)> DropTextEvent;
 typedef Event<void(class Control*)> SelectionChangedEvent;
 
 class Control
@@ -119,8 +120,6 @@ protected:
 	std::wstring _text;
 	Font* _font = NULL;
 	bool _ownsFont = false;
-	// 上一次 PostRender 触发的 client 坐标系矩形（包含标题栏 top 偏移）
-	// 用于处理控件尺寸变小（如 Menu/ComboBox 收起）时，旧绘制区域未被失效导致的残影。
 	D2D1_RECT_F _lastPostRenderClientRect{ 0,0,0,0 };
 	bool _hasLastPostRenderClientRect = false;
 	
@@ -199,6 +198,7 @@ public:
 	GotFocusEvent OnGotFocus = GotFocusEvent();
 	LostFocusEvent OnLostFocus = LostFocusEvent();
 	DropFileEvent OnDropFile = DropFileEvent();
+	DropTextEvent OnDropText = DropTextEvent();
 	class Form* ParentForm;
 	class Control* Parent;
 	bool TextChanged = true;

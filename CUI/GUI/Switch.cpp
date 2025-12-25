@@ -105,6 +105,7 @@ bool Switch::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof,
 		if (WM_LBUTTONUP == message && this->ParentForm->Selected == this)
 		{
 			this->Checked = !this->Checked;
+			this->OnChecked(this);
 			MouseEventArgs event_obj = MouseEventArgs(FromParamToMouseButtons(message), 0, xof, yof, HIWORD(wParam));
 			this->OnMouseClick(this, event_obj);
 		}
@@ -121,6 +122,7 @@ bool Switch::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof,
 		if (lastSelected && lastSelected == this)
 		{
 			this->Checked = !this->Checked;
+			this->OnChecked(this);
 			MouseEventArgs event_obj = MouseEventArgs(FromParamToMouseButtons(message), 0, xof, yof, HIWORD(wParam));
 			this->OnMouseDoubleClick(this, event_obj);
 			this->PostRender();

@@ -314,7 +314,12 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
 	textbox2->ScrollToEnd();
 	textbox2->Margin = Thickness(0, 0, 15, 0);
 	textbox2->AnchorStyles = AnchorStyles::Left | AnchorStyles::Right;
-
+	textbox2->OnDropText += [](class Control* sender, std::wstring text) {
+		RichTextBox* rtb = (RichTextBox*)sender;
+		rtb->AppendText(text);
+		rtb->ScrollToEnd();
+		rtb->PostRender();
+		};
 	tabControl1 = this->AddControl(new TabControl(10, combobox1->Bottom + 5, 1200, 300));
 	tabControl1->BackColor = D2D1_COLOR_F{ 1.0f,1.0f,1.0f,0.0f };
 	tabControl1->Margin = Thickness(0, 0, 15, 40);

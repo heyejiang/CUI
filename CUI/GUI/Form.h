@@ -45,10 +45,12 @@ typedef Event<void(class Form*, std::wstring, std::wstring)> FormTextChangedEven
 typedef Event<void(class Form*)> FormGotFocusEvent;
 typedef Event<void(class Form*)> FormLostFocusEvent;
 typedef Event<void(class Form*, List<std::wstring>)> FormDropFileEvent;
+typedef Event<void(class Form*, std::wstring)> FormDropTextEvent;
 typedef Event<void(class Form*, MouseEventArgs)> FormMouseClickEvent;
 class Form
 {
 private:
+	friend class FormDropTarget;
 	POINT _Location_INIT;
 	SIZE _Size_INTI;
 	std::wstring _text;
@@ -96,6 +98,16 @@ private:
 	class LayoutEngine* _layoutEngine = nullptr;
 	bool _needsLayout = false;
 	bool _resourcesCleaned = false;
+	// 鼠标 Hover/Leave 跟踪
+	bool _mouseLeaveTracking = false;
+	class Control* _hoverControl = NULL;
+	// 焦点通知同步：用于捕获直接写 Selected 的旧代码路径
+	class Control* _focusNotifiedSelected = NULL;
+	// OLE Drag&Drop 支持：用于在拖动悬停时返回接受/不接受光标，并支持文本拖放
+	struct IDropTarget* _dropTarget = nullptr;
+	bool _dropRegistered = false;
+	static void EnsureOleInitialized();
+	void EnsureDropTargetRegistered();
 	void CleanupResources();
 
 public:
@@ -118,6 +130,7 @@ public:
 	FormGotFocusEvent OnGotFocus = FormGotFocusEvent();
 	FormLostFocusEvent OnLostFocus = FormLostFocusEvent();
 	FormDropFileEvent OnDropFile = FormDropFileEvent();
+	FormDropTextEvent OnDropText = FormDropTextEvent();
 	FormClosingEvent OnFormClosing = FormClosingEvent();
 	FormClosedEvent OnFormClosed = FormClosedEvent();
 
@@ -180,6 +193,8 @@ public:
 	HICON Icon = NULL;
 	Form(std::wstring _text = L"NativeWindow", POINT _location = { 0,0 }, SIZE _size = { 600,400 });
 	~Form();
+	// 统一设置键盘焦点控件（Selected），并触发控件 Got/LostFocus。
+	void SetSelectedControl(class Control* value, bool postRender = true);
 	void Show();
 	void ShowDialog(HWND parent = NULL);
 	void Close();

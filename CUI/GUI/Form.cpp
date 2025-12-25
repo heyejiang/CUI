@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <functional>
 #include <unordered_map>
+#include <oleidl.h>
+#include <shellapi.h>
 #include <dwmapi.h>
 #include <windowsx.h>
 #pragma comment(lib, "Dwmapi.lib")
@@ -120,6 +122,219 @@ Control* Form::HitTestControlAt(POINT contentMouse)
 	return NULL;
 }
 
+static bool DataObjectHasFormat(IDataObject* pDataObj, CLIPFORMAT cf)
+{
+	if (!pDataObj) return false;
+	FORMATETC fmt{};
+	fmt.cfFormat = cf;
+	fmt.dwAspect = DVASPECT_CONTENT;
+	fmt.lindex = -1;
+	fmt.tymed = TYMED_HGLOBAL;
+	return SUCCEEDED(pDataObj->QueryGetData(&fmt));
+}
+
+static std::optional<List<std::wstring>> TryExtractDroppedFiles(IDataObject* pDataObj)
+{
+	if (!pDataObj) return std::nullopt;
+	FORMATETC fmt{};
+	fmt.cfFormat = CF_HDROP;
+	fmt.dwAspect = DVASPECT_CONTENT;
+	fmt.lindex = -1;
+	fmt.tymed = TYMED_HGLOBAL;
+	STGMEDIUM stg{};
+	if (FAILED(pDataObj->GetData(&fmt, &stg))) return std::nullopt;
+
+	List<std::wstring> files;
+	HDROP hDrop = (HDROP)GlobalLock(stg.hGlobal);
+	if (hDrop)
+	{
+		UINT count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
+		WCHAR buf[MAX_PATH];
+		for (UINT i = 0; i < count; i++)
+		{
+			buf[0] = 0;
+			DragQueryFileW(hDrop, i, buf, MAX_PATH);
+			files.Add(buf);
+		}
+		GlobalUnlock(stg.hGlobal);
+	}
+	ReleaseStgMedium(&stg);
+	if (files.Count <= 0) return std::nullopt;
+	return files;
+}
+
+static std::optional<std::wstring> TryExtractDroppedText(IDataObject* pDataObj)
+{
+	if (!pDataObj) return std::nullopt;
+	CLIPFORMAT fmtText = CF_UNICODETEXT;
+	if (!DataObjectHasFormat(pDataObj, fmtText))
+	{
+		fmtText = CF_TEXT;
+		if (!DataObjectHasFormat(pDataObj, fmtText))
+			return std::nullopt;
+	}
+
+	FORMATETC fmt{};
+	fmt.cfFormat = fmtText;
+	fmt.dwAspect = DVASPECT_CONTENT;
+	fmt.lindex = -1;
+	fmt.tymed = TYMED_HGLOBAL;
+	STGMEDIUM stg{};
+	if (FAILED(pDataObj->GetData(&fmt, &stg))) return std::nullopt;
+
+	std::optional<std::wstring> result;
+	void* p = GlobalLock(stg.hGlobal);
+	if (p)
+	{
+		if (fmtText == CF_UNICODETEXT)
+		{
+			result = std::wstring((const wchar_t*)p);
+		}
+		else
+		{
+			// ANSI -> UTF-16
+			const char* s = (const char*)p;
+			int len = (int)strlen(s);
+			int wlen = MultiByteToWideChar(CP_ACP, 0, s, len, NULL, 0);
+			std::wstring ws;
+			ws.resize(wlen);
+			if (wlen > 0)
+				MultiByteToWideChar(CP_ACP, 0, s, len, ws.data(), wlen);
+			result = std::move(ws);
+		}
+		GlobalUnlock(stg.hGlobal);
+	}
+	ReleaseStgMedium(&stg);
+	if (result && result->empty()) return std::nullopt;
+	return result;
+}
+
+class FormDropTarget final : public IDropTarget
+{
+public:
+	explicit FormDropTarget(Form* f) : _ref(1), _form(f) {}
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override
+	{
+		if (!ppvObject) return E_POINTER;
+		*ppvObject = nullptr;
+		if (riid == IID_IUnknown || riid == IID_IDropTarget)
+		{
+			*ppvObject = static_cast<IDropTarget*>(this);
+			AddRef();
+			return S_OK;
+		}
+		return E_NOINTERFACE;
+	}
+	ULONG STDMETHODCALLTYPE AddRef(void) override { return InterlockedIncrement(&_ref); }
+	ULONG STDMETHODCALLTYPE Release(void) override
+	{
+		ULONG r = InterlockedDecrement(&_ref);
+		if (r == 0) delete this;
+		return r;
+	}
+
+	HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override
+	{
+		(void)grfKeyState;
+		_lastDataObj = pDataObj;
+		return DragOver(grfKeyState, pt, pdwEffect);
+	}
+	HRESULT STDMETHODCALLTYPE DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override
+	{
+		(void)grfKeyState;
+		if (!pdwEffect) return E_POINTER;
+		*pdwEffect = DROPEFFECT_NONE;
+		if (!_form || !_form->Handle) return S_OK;
+
+		POINT client{ pt.x, pt.y };
+		ScreenToClient(_form->Handle, &client);
+		POINT contentMouse{ client.x, client.y - _form->ClientTop() };
+		if (_form->VisibleHead && client.y < _form->ClientTop())
+			return S_OK;
+
+		auto* target = _form->HitTestControlAt(contentMouse);
+		bool hasFiles = DataObjectHasFormat(_lastDataObj, CF_HDROP);
+		bool hasText = DataObjectHasFormat(_lastDataObj, CF_UNICODETEXT) || DataObjectHasFormat(_lastDataObj, CF_TEXT);
+
+		auto canAcceptFiles = [&](Control* c) -> bool { return c && c->OnDropFile.Count() > 0; };
+		auto canAcceptText = [&](Control* c) -> bool { return c && c->OnDropText.Count() > 0; };
+
+		bool accept = false;
+		if (target)
+		{
+			if (hasFiles && canAcceptFiles(target)) accept = true;
+			else if (hasText && canAcceptText(target)) accept = true;
+		}
+		else
+		{
+			if (hasFiles && _form->OnDropFile.Count() > 0) accept = true;
+			else if (hasText && _form->OnDropText.Count() > 0) accept = true;
+		}
+
+		if (accept)
+			*pdwEffect = DROPEFFECT_COPY;
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE DragLeave(void) override
+	{
+		_lastDataObj = nullptr;
+		return S_OK;
+	}
+	HRESULT STDMETHODCALLTYPE Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override
+	{
+		(void)grfKeyState;
+		if (!pdwEffect) return E_POINTER;
+		*pdwEffect = DROPEFFECT_NONE;
+		if (!_form || !_form->Handle || !pDataObj) return S_OK;
+
+		POINT client{ pt.x, pt.y };
+		ScreenToClient(_form->Handle, &client);
+		POINT contentMouse{ client.x, client.y - _form->ClientTop() };
+		if (_form->VisibleHead && client.y < _form->ClientTop())
+			return S_OK;
+
+		auto* target = _form->HitTestControlAt(contentMouse);
+
+		if (auto files = TryExtractDroppedFiles(pDataObj))
+		{
+			if (target && target->OnDropFile.Count() > 0)
+			{
+				target->OnDropFile(target, *files);
+				*pdwEffect = DROPEFFECT_COPY;
+			}
+			else if (!target && _form->OnDropFile.Count() > 0)
+			{
+				_form->OnDropFile(_form, *files);
+				*pdwEffect = DROPEFFECT_COPY;
+			}
+			return S_OK;
+		}
+
+		if (auto text = TryExtractDroppedText(pDataObj))
+		{
+			if (target && target->OnDropText.Count() > 0)
+			{
+				target->OnDropText(target, *text);
+				*pdwEffect = DROPEFFECT_COPY;
+			}
+			else if (!target && _form->OnDropText.Count() > 0)
+			{
+				_form->OnDropText(_form, *text);
+				*pdwEffect = DROPEFFECT_COPY;
+			}
+			return S_OK;
+		}
+
+		return S_OK;
+	}
+
+private:
+	volatile LONG _ref;
+	Form* _form;
+	IDataObject* _lastDataObj = nullptr;
+};
+
 static Control* HitTestRootControlAt(Form* f, POINT contentMouse)
 {
 	if (!f) return NULL;
@@ -234,6 +449,50 @@ void Form::UpdateCursorFromCurrentMouse()
 	ScreenToClient(this->Handle, &mouse);
 	POINT contentMouse{ mouse.x, mouse.y - ClientTop() };
 	UpdateCursor(mouse, contentMouse);
+}
+
+void Form::SetSelectedControl(Control* value, bool postRender)
+{
+	auto* old = this->Selected;
+	if (old == value) return;
+	this->Selected = value;
+	if (old)
+	{
+		old->OnLostFocus(old);
+		if (postRender) old->PostRender();
+	}
+	if (value)
+	{
+		value->OnGotFocus(value);
+		if (postRender) value->PostRender();
+	}
+	this->_focusNotifiedSelected = this->Selected;
+}
+
+static void RaiseControlMouseEnterLeave(Form* f, Control* oldHover, Control* newHover, POINT contentMouse)
+{
+	if (!f) return;
+	if (oldHover == newHover) return;
+
+	auto makeArgs = [&](Control* c) -> MouseEventArgs
+		{
+			if (!c) return MouseEventArgs(MouseButtons::None, 0, 0, 0, 0);
+			auto abs = c->AbsLocation;
+			return MouseEventArgs(MouseButtons::None, 0, contentMouse.x - abs.x, contentMouse.y - abs.y, 0);
+		};
+
+	if (oldHover)
+	{
+		auto args = makeArgs(oldHover);
+		oldHover->OnMouseLeaved(oldHover, args);
+		oldHover->PostRender();
+	}
+	if (newHover)
+	{
+		auto args = makeArgs(newHover);
+		newHover->OnMouseEnter(newHover, args);
+		newHover->PostRender();
+	}
 }
 
 bool Form::TryGetCaptionButtonRect(CaptionButtonKind kind, RECT& out)
@@ -524,17 +783,14 @@ SET_CPP(Form, bool, AllowResize)
 	this->_allowResize = value;
 	if (!value)
 	{
-		// 关闭可调整大小时，自动隐藏最大化按钮
 		this->_maxBoxBeforeAllowResize = this->MaxBox;
 		this->MaxBox = false;
 
-		// 如果当前已最大化，恢复成普通窗口
 		if (this->Handle && IsZoomed(this->Handle))
 			ShowWindow(this->Handle, SW_RESTORE);
 	}
 	else
 	{
-		// 重新允许调整大小时，恢复之前的最大化按钮状态
 		this->MaxBox = this->_maxBoxBeforeAllowResize;
 	}
 
@@ -609,6 +865,7 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 	SetWindowLongPtrW(this->Handle, GWLP_USERDATA, (LONG_PTR)this ^ 0xFFFFFFFFFFFFFFFF);
 
 	DragAcceptFiles(this->Handle, TRUE);
+	EnsureDropTargetRegistered();
 
 
 	Application::Forms.Add(this->Handle, this);
@@ -640,6 +897,16 @@ void Form::CleanupResources()
 	if (_resourcesCleaned)
 		return;
 	_resourcesCleaned = true;
+	if (this->Handle && _dropRegistered)
+	{
+		RevokeDragDrop(this->Handle);
+		_dropRegistered = false;
+	}
+	if (_dropTarget)
+	{
+		_dropTarget->Release();
+		_dropTarget = nullptr;
+	}
 
 	auto isDescendant = [&](Control* root, Control* node, const auto& self) -> bool
 		{
@@ -708,6 +975,31 @@ void Form::CleanupResources()
 	}
 }
 
+void Form::EnsureOleInitialized()
+{
+	static bool inited = false;
+	if (inited) return;
+	inited = true;
+	OleInitialize(NULL);
+}
+
+void Form::EnsureDropTargetRegistered()
+{
+	if (!this->Handle) return;
+	if (_dropRegistered) return;
+	EnsureOleInitialized();
+	if (!_dropTarget)
+	{
+		_dropTarget = new FormDropTarget(this);
+	}
+	HRESULT hr = RegisterDragDrop(this->Handle, _dropTarget);
+	if (SUCCEEDED(hr))
+	{
+		_dropRegistered = true;
+		DragAcceptFiles(this->Handle, FALSE);
+	}
+}
+
 IDCompositionDevice* Form::GetDCompDevice() const
 {
 	return _dcompHost ? _dcompHost->GetDCompDevice() : nullptr;
@@ -748,7 +1040,7 @@ void Form::PerformLayout()
 		{
 			auto control = this->Controls[i];
 			if (!control || !control->Visible) continue;
-			if (control->Type() == UIClass::UI_Menu) continue; // 跳过主菜单
+			if (control->Type() == UIClass::UI_Menu) continue;
 			
 			control->EnsureLayoutBase();
 			POINT loc = control->_layoutBaseLocation;
@@ -758,8 +1050,6 @@ void Form::PerformLayout()
 			HorizontalAlignment hAlign = control->HAlign;
 			VerticalAlignment vAlign = control->VAlign;
 
-			// Anchor 模式下：当锚定到 Left/Top 且对应 Margin 非 0 时，将 Margin 视为到边界的绑定距离
-			// （避免 Location 与 Margin 在 Left/Top 方向叠加导致的“边距翻倍”）
 			float baseLeft = (float)loc.x;
 			float baseTop = (float)loc.y;
 			if (anchor & AnchorStyles::Left)
@@ -818,8 +1108,6 @@ void Form::PerformLayout()
 			}
 			else
 			{
-				// 兼容增强：普通容器下，仅设置 Right/Bottom Margin 时，也视为对右/下边界的约束
-				// 典型用法：Location.x 固定左侧，Margin.Right 固定右侧留白
 				if (hAlign == HorizontalAlignment::Left && margin.Right != 0.0f)
 				{
 					w = availableW - (float)loc.x;
@@ -831,7 +1119,6 @@ void Form::PerformLayout()
 					if (h < 0) h = 0;
 				}
 
-				// 未设置 Anchor 时，使用对齐属性（Left/Top 为兼容模式：保留 Location 语义）
 				if (hAlign == HorizontalAlignment::Stretch)
 				{
 					x = margin.Left;
@@ -1283,6 +1570,10 @@ bool Form::RemoveControl(Control* c)
 			this->MainStatusBar = NULL;
 		if (this->UnderMouse == c)
 			this->UnderMouse = NULL;
+		if (this->Selected == c)
+			this->SetSelectedControl(NULL, true);
+		if (this->_hoverControl == c)
+			this->_hoverControl = NULL;
 		c->Parent = NULL;
 		c->ParentForm = NULL;
 		return true;
@@ -1300,8 +1591,41 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 	Control* HitControl = NULL;
 	switch (message)
 	{
+	case WM_DROPFILES:
+	{
+		HDROP hDropInfo = HDROP(wParam);
+		UINT uFileNum = DragQueryFile(hDropInfo, 0xffffffff, NULL, 0);
+		TCHAR strFileName[MAX_PATH];
+		List<std::wstring> files;
+		for (int i = 0; i < (int)uFileNum; i++)
+		{
+			DragQueryFile(hDropInfo, i, strFileName, MAX_PATH);
+			files.Add(strFileName);
+		}
+		DragFinish(hDropInfo);
+		if (files.Count > 0)
+		{
+			this->OnDropFile(this, files);
+			auto* target = HitTestControlAt(contentMouse);
+			if (target)
+			{
+				target->OnDropFile(target, files);
+			}
+		}
+	}
+	break;
 	case WM_MOUSEMOVE:
 	{
+		if (!this->_mouseLeaveTracking && this->Handle)
+		{
+			TRACKMOUSEEVENT tme{};
+			tme.cbSize = sizeof(tme);
+			tme.dwFlags = TME_LEAVE;
+			tme.hwndTrack = this->Handle;
+			::TrackMouseEvent(&tme);
+			this->_mouseLeaveTracking = true;
+		}
+
 		if (this->VisibleHead && mouse.y < this->HeadHeight)
 		{
 			UpdateCaptionHover(mouse);
@@ -1317,6 +1641,10 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 
 		if (this->VisibleHead && mouse.y < top)
 		{
+			RaiseControlMouseEnterLeave(this, this->_hoverControl, NULL, contentMouse);
+			this->_hoverControl = NULL;
+			this->UnderMouse = NULL;
+			this->OnMouseMove(this, MouseEventArgs(MouseButtons::None, 0, contentMouse.x, contentMouse.y, 0));
 			ApplyCursor(CursorKind::Arrow);
 			break;
 		}
@@ -1325,6 +1653,9 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 		{
 			if (this->Selected->IsVisual)
 			{
+				RaiseControlMouseEnterLeave(this, this->_hoverControl, this->Selected, contentMouse);
+				this->_hoverControl = this->Selected;
+				this->UnderMouse = this->Selected;
 				HitControl = this->Selected;
 				auto location = this->Selected->AbsLocation;
 				this->Selected->ProcessMessage(message, wParam, lParam, contentMouse.x - location.x, contentMouse.y - location.y);
@@ -1332,27 +1663,33 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 				break;
 			}
 		}
-		auto lastUnderMouse = this->UnderMouse;
-		this->UnderMouse = NULL;
+
+		Control* newHover = HitTestControlAt(contentMouse);
+		RaiseControlMouseEnterLeave(this, this->_hoverControl, newHover, contentMouse);
+		this->_hoverControl = newHover;
+		this->UnderMouse = newHover;
 
 		auto hit = HitTestRootControlAt(this, contentMouse);
 		if (hit)
 		{
 			HitControl = hit;
-			this->UnderMouse = hit;
 			auto abs = hit->AbsLocation;
 			hit->ProcessMessage(message, wParam, lParam, contentMouse.x - abs.x, contentMouse.y - abs.y);
 		}
-		if (lastUnderMouse != this->UnderMouse)
-		{
-			if (this->UnderMouse)this->UnderMouse->PostRender();
-			if (lastUnderMouse)lastUnderMouse->PostRender();
-		}
-
+		this->UnderMouse = this->_hoverControl;
 		UpdateCursor(mouse, contentMouse);
+		this->OnMouseMove(this, MouseEventArgs(MouseButtons::None, 0, contentMouse.x, contentMouse.y, 0));
 	}
 	break;
-	case WM_DROPFILES:
+	case WM_MOUSELEAVE:
+	{
+		this->_mouseLeaveTracking = false;
+		RaiseControlMouseEnterLeave(this, this->_hoverControl, NULL, contentMouse);
+		this->_hoverControl = NULL;
+		this->UnderMouse = NULL;
+		UpdateCursorFromCurrentMouse();
+	}
+	break;
 	case WM_MOUSEWHEEL:
 	case WM_LBUTTONDOWN:
 	case WM_RBUTTONDOWN:
@@ -1457,6 +1794,18 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 			auto abs = hit->AbsLocation;
 			hit->ProcessMessage(message, wParam, lParam, contentMouse.x - abs.x, contentMouse.y - abs.y);
 		}
+		if (message == WM_MOUSEWHEEL)
+		{
+			this->OnMouseWheel(this, MouseEventArgs(MouseButtons::None, 0, contentMouse.x, contentMouse.y, GET_WHEEL_DELTA_WPARAM(wParam)));
+		}
+		else if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN)
+		{
+			this->OnMouseDown(this, MouseEventArgs(FromParamToMouseButtons(message), 0, contentMouse.x, contentMouse.y, HIWORD(wParam)));
+		}
+		else if (message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP)
+		{
+			this->OnMouseUp(this, MouseEventArgs(FromParamToMouseButtons(message), 0, contentMouse.x, contentMouse.y, HIWORD(wParam)));
+		}
 
 		if (message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP)
 			UpdateCursor(mouse, contentMouse);
@@ -1481,6 +1830,16 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 			KeyEventArgs event_obj = KeyEventArgs((Keys)(wParam | 0));
 			this->OnKeyDown(this, event_obj);
 		}
+	}
+	break;
+	case WM_SETFOCUS:
+	{
+		this->OnGotFocus(this);
+	}
+	break;
+	case WM_KILLFOCUS:
+	{
+		this->OnLostFocus(this);
 	}
 	break;
 	case WM_KEYUP:
@@ -1569,11 +1928,26 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 	}
 	break;
 	};
+	// 兼容：旧控件代码路径直接写 Selected，这里补齐焦点事件
+	if (this->_focusNotifiedSelected != this->Selected)
+	{
+		auto* old = this->_focusNotifiedSelected;
+		auto* now = this->Selected;
+		this->_focusNotifiedSelected = now;
+		if (old)
+		{
+			old->OnLostFocus(old);
+			old->PostRender();
+		}
+		if (now)
+		{
+			now->OnGotFocus(now);
+			now->PostRender();
+		}
+	}
 	if (WM_LBUTTONDOWN == message && HitControl == NULL && this->Selected && HitControl != this->Selected)
 	{
-		auto se = this->Selected;
-		this->Selected = NULL;
-		se->PostRender();
+		this->SetSelectedControl(NULL, true);
 	}
 	return true;
 }
@@ -1709,9 +2083,6 @@ LRESULT CustomFrameHitTest(HWND _hWnd, WPARAM wParam, LPARAM lParam, int caption
 }
 LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	//char buffer[256];
-	//sprintf_s(buffer, 256, "Form Window Message: 0x%08X\r\n", message);
-	//OutputDebugStringA(buffer);
 	Form* form = (Form*)(GetWindowLongPtrW(hWnd, GWLP_USERDATA) ^ 0xFFFFFFFFFFFFFFFF);
 	if ((ULONG64)form != 0xFFFFFFFFFFFFFFFF && Application::Forms.ContainsKey(form->Handle))
 	{
