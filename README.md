@@ -278,11 +278,11 @@ CUI Designer 是专为 CUI 框架打造的可视化 UI 设计工具，提供类�
 #### 1. 创建新设计
 
 ```
-1. 启动 CuiDesigner.exe
+1. 启动 Designer.exe（由解决方案中的 CuiDesigner 项目生成）
 2. 点击"新建"按钮创建空白窗体
 3. 从工具箱拖拽控件到画布
 4. 在属性编辑器中调整控件属性
-5. 保存为 .json 设计文件
+5. 保存为设计文件（推荐扩展名：.cui.json；本质是 JSON）
 ```
 
 #### 2. 支持的控件
@@ -351,6 +351,12 @@ CUI Designer 是专为 CUI 框架打造的可视化 UI 设计工具，提供类�
 
 点击"导出代码"按钮，设计器会生成两个文件：
 
+补充说明（与当前代码实现一致）：
+- 你选择导出路径后，会自动以同一基名生成 `.h` 与 `.cpp`（例如选择 `MyForm` 则输出 `MyForm.h` + `MyForm.cpp`）
+- 生成的 C++ 类名等于该基名（例如 `class MyForm : public Form`）
+- 生成代码会包含窗体标题/尺寸/位置/颜色/标题栏按钮等窗体属性
+- 成员变量名来自控件 `Name`（会做 C++ 标识符清理；重名时会自动追加数字后缀）
+
 **MyForm.h**（头文件）：
 ```cpp
 #pragma once
@@ -400,25 +406,69 @@ void MyForm::InitializeComponents()
 
 #### 7. 设计文件格式
 
-设计文件保存为 JSON 格式，包含：
+设计文件保存为 JSON 格式（UTF-8）。当前 schema 固定为 `cui.designer`，版本号为 `1`。
+
+说明：
+- 每个控件的 `name` 在同一文件内必须唯一且非空（用于父子引用与导出变量名）；否则保存会失败
+- `events` 目前保存的是“是否启用事件”（布尔值）。如果你打开旧文件里是字符串 handler 名，加载时仍会兼容读取，但再次保存会规范为布尔值
+- `TabPage` 不作为独立控件保存；Tab 页信息存储在 `TabControl` 的 `extra.pages` 里，页内子控件通过 `parent` 引用 `TabControlName#pageN`
 
 ```json
 {
-  "FormProperties": {
-    "Text": "我的窗体",
-    "Size": {"Width": 800, "Height": 600},
-    "Location": {"X": 100, "Y": 100},
-    "VisibleHead": true,
-    "HeadHeight": 24
-  },
-  "Controls": [
+    "schema": "cui.designer",
+    "version": 1,
+    "form": {
+        "name": "MainForm",
+        "text": "我的窗体",
+        "size": { "w": 800, "h": 600 },
+        "location": { "x": 100, "y": 100 },
+        "backColor": { "r": 0.96, "g": 0.96, "b": 0.96, "a": 1.0 },
+        "foreColor": { "r": 0.0, "g": 0.0, "b": 0.0, "a": 1.0 },
+        "showInTaskBar": true,
+        "topMost": false,
+        "enable": true,
+        "visible": true,
+        "visibleHead": true,
+        "headHeight": 24,
+        "minBox": true,
+        "maxBox": true,
+        "closeBox": true,
+        "centerTitle": true,
+        "allowResize": true,
+        "events": {
+            "OnSizeChanged": true
+        }
+    },
+    "controls": [
     {
-      "Type": "Button",
-      "Name": "button1",
-      "Location": {"X": 10, "Y": 10},
-      "Size": {"Width": 100, "Height": 30},
-      "Text": "Click Me",
-      "BackColor": {"R": 0.2, "G": 0.4, "B": 0.8, "A": 1.0}
+            "name": "button1",
+            "type": "Button",
+            "parent": null,
+            "order": 0,
+            "props": {
+                "text": "Click Me",
+                "location": { "x": 10, "y": 10 },
+                "size": { "w": 100, "h": 30 },
+                "enable": true,
+                "visible": true,
+                "backColor": { "r": 0.2, "g": 0.4, "b": 0.8, "a": 1.0 },
+                "foreColor": { "r": 0.0, "g": 0.0, "b": 0.0, "a": 1.0 },
+                "bolderColor": { "r": 0.0, "g": 0.0, "b": 0.0, "a": 0.0 },
+                "margin": { "l": 0, "t": 0, "r": 0, "b": 0 },
+                "padding": { "l": 0, "t": 0, "r": 0, "b": 0 },
+                "anchor": 0,
+                "hAlign": "Left",
+                "vAlign": "Top",
+                "dock": "None",
+                "gridRow": 0,
+                "gridColumn": 0,
+                "gridRowSpan": 1,
+                "gridColumnSpan": 1,
+                "sizeMode": 0
+            },
+            "events": {
+                "OnMouseClick": true
+            }
     }
   ]
 }
@@ -458,14 +508,14 @@ CuiDesigner/
 - **框选**：橡皮筋矩形与控件矩形相交检测
 - **多选拖动**：记录所有选中控件的初始位置，应用统一偏移
 - **嵌套容器**：通过父子关系递归处理，容器内控件使用相对坐标
-- **属性序列化**：使用 JSON 库（nlohmann/json）保存/加载设计
+- **属性序列化**：使用嵌入的 nlohmann/json（见 `CppUtils/Utils/json.h`）保存/加载设计
 
 ## 🚀 快速开始
 
 ### 方式一：使用设计器（推荐）🆕
 
 ```
-1. 启动 CuiDesigner.exe
+1. 启动 Designer.exe（由解决方案中的 CuiDesigner 项目生成）
 2. 从工具箱拖拽控件设计界面
 3. 编辑控件属性
 4. 点击"导出代码"生成 C++ 文件
