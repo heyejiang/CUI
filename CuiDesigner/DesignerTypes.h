@@ -2,6 +2,7 @@
 #include "../CUI/GUI/Control.h"
 #include <string>
 #include <map>
+#include <unordered_map>
 
 // 设计器中控件的元数据
 struct ControlMetadata
@@ -24,6 +25,10 @@ public:
 	std::wstring Name;
 	UIClass Type;
 	bool IsSelected;
+
+	// 事件绑定：key 为事件成员名（如 OnMouseClick/OnTextChanged），value 为类成员函数名
+	// 仅用于设计期保存/加载与导出代码生成；运行时不自动绑定。
+	std::map<std::wstring, std::wstring> EventHandlers;
 	
 	// 用于调整大小的句柄位置
 	enum class ResizeHandle

@@ -39,14 +39,41 @@ class PropertyGrid : public Panel
 private:
 	std::vector<PropertyItem*> _items;
 	std::vector<Control*> _extraControls;
+	Panel* _contentHost = nullptr;
+	struct ScrollEntry
+	{
+		Control* ControlPtr = nullptr;
+		int BaseY = 0;
+	};
+	std::vector<ScrollEntry> _scrollEntries;
+	int _contentTop = 45;
+	int _contentBottomPadding = 10;
+	int _scrollOffsetY = 0;
+	int _contentHeight = 0;
+	bool _draggingScrollThumb = false;
+	int _dragStartMouseY = 0;
+	int _dragStartScrollY = 0;
+
 	std::shared_ptr<DesignerControl> _currentControl;
 	DesignerCanvas* _canvas = nullptr;
 	Label* _titleLabel;
+
+	Panel* GetContentContainer();
+	int GetContentTopLocal();
+	int GetContentWidthLocal();
+	int GetViewportHeightLocal();
+	void UpdateContentHostLayout();
+
+	void RegisterScrollable(Control* c);
+	void UpdateScrollLayout();
+	void ClampScroll();
+	bool TryGetScrollBarLocalRect(D2D1_RECT_F& outTrack, D2D1_RECT_F& outThumb);
 	
 	void CreatePropertyItem(std::wstring propertyName, std::wstring value, int& yOffset);
 	void CreateColorPropertyItem(std::wstring propertyName, const D2D1_COLOR_F& value, int& yOffset);
 	void CreateThicknessPropertyItem(std::wstring propertyName, const Thickness& value, int& yOffset);
 	void CreateBoolPropertyItem(std::wstring propertyName, bool value, int& yOffset);
+	void CreateEventBoolPropertyItem(std::wstring eventName, bool enabled, int& yOffset);
 	void CreateAnchorPropertyItem(std::wstring propertyName, uint8_t anchorStyles, int& yOffset);
 	void CreateEnumPropertyItem(std::wstring propertyName, const std::wstring& value,
 		const std::vector<std::wstring>& options, int& yOffset);
@@ -60,6 +87,8 @@ private:
 public:
 	PropertyGrid(int x, int y, int width, int height);
 	virtual ~PropertyGrid();
+	void Update() override;
+	bool ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof) override;
 	
 	void SetDesignerCanvas(DesignerCanvas* canvas) { _canvas = canvas; }
 	void LoadControl(std::shared_ptr<DesignerControl> control);

@@ -186,10 +186,15 @@ ToolBox::ToolBox(int x, int y, int width, int height)
 	this->_titleLabel->Size = {width - 20, 25};
 	this->_titleLabel->Font = new ::Font(L"Microsoft YaHei", 16.0f);
 	this->AddControl(_titleLabel);
+
+	_itemsHost = new Panel(0, _contentTop, width, std::max(0, height - _contentTop));
+	_itemsHost->BackColor = D2D1::ColorF(0, 0, 0, 0);
+	_itemsHost->Boder = 0.0f;
+	this->AddControl(_itemsHost);
 	
 	// 获取可用控件
 	auto controls = ControlRegistry::GetAvailableControls();
-	int yOffset = _contentTop;
+	int yOffset = 0;
 	
 	for (const auto& ctrl : controls)
 	{
@@ -201,7 +206,7 @@ ToolBox::ToolBox(int x, int y, int width, int height)
 			OnControlSelected(ctrl.Type);
 		};
 		
-		this->AddControl(item);
+		_itemsHost->AddControl(item);
 		_items.push_back(item);
 		
 		yOffset += 39;
@@ -216,14 +221,19 @@ ToolBox::~ToolBox()
 
 void ToolBox::UpdateScrollLayout()
 {
-	// contentHeight: 从 contentTop 到最后一个 item 的底部，再加 padding
-	int maxBottom = _contentTop;
+	if (_itemsHost)
+	{
+		_itemsHost->Location = { 0, _contentTop };
+		_itemsHost->Size = { this->Width, std::max(0, this->Height - _contentTop) };
+	}
+
+	int maxBottom = 0;
 	for (auto* item : _items)
 	{
 		if (!item) continue;
 		maxBottom = std::max(maxBottom, item->BaseY + item->Height);
 	}
-	_contentHeight = (maxBottom - _contentTop) + _contentBottomPadding;
+	_contentHeight = maxBottom + _contentBottomPadding;
 	ClampScroll();
 
 	for (auto* item : _items)
@@ -235,7 +245,7 @@ void ToolBox::UpdateScrollLayout()
 
 void ToolBox::ClampScroll()
 {
-	int viewport = this->Height - _contentTop;
+	int viewport = _itemsHost ? _itemsHost->Height : (this->Height - _contentTop);
 	if (viewport < 0) viewport = 0;
 	int maxScroll = std::max(0, _contentHeight - viewport);
 	_scrollOffsetY = std::clamp(_scrollOffsetY, 0, maxScroll);
@@ -245,7 +255,7 @@ bool ToolBox::TryGetScrollBarLocalRect(D2D1_RECT_F& outTrack, D2D1_RECT_F& outTh
 {
 	const float trackWidth = 10.0f;
 	const float trackPad = 2.0f;
-	float viewport = (float)std::max(0, this->Height - _contentTop);
+	float viewport = (float)std::max(0, _itemsHost ? _itemsHost->Height : (this->Height - _contentTop));
 	if (_contentHeight <= 0 || viewport <= 0.0f) return false;
 	if ((float)_contentHeight <= viewport) return false;
 
@@ -303,7 +313,6 @@ bool ToolBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof
 		int viewport = this->Height - _contentTop;
 		if (_contentHeight > viewport)
 		{
-			// wheel delta: 120 per notch
 			int delta = GET_WHEEL_DELTA_WPARAM(wParam);
 			int step = 39; // 与 item 间距一致
 			_scrollOffsetY -= (delta / 120) * step;

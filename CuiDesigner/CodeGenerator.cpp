@@ -6,6 +6,7 @@
 #include <functional>
 #include <cfloat>
 #include <cmath>
+#include <map>
 
 // 生成时需要访问具体控件类型的公开字段/方法
 #include "../CUI/GUI/ComboBox.h"
@@ -76,12 +77,151 @@ static std::string AnchorStylesToExpr(uint8_t a)
 	return out;
 }
 
+namespace
+{
+	struct GeneratedEventBinding
+	{
+		std::string ControlVar;
+		std::string EventField;
+		std::string HandlerName;
+		std::string ParamList; // "Control* sender" ...
+	};
+
+	static std::string LocalSanitizeCppIdentifier(const std::string& raw)
+	{
+		std::string out;
+		out.reserve(raw.size() + 2);
+		for (unsigned char ch : raw)
+		{
+			if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_')
+				out.push_back((char)ch);
+			else
+				out.push_back('_');
+		}
+		if (!out.empty() && (out[0] >= '0' && out[0] <= '9'))
+			out.insert(out.begin(), '_');
+		if (out.empty()) out = "control";
+		return out;
+	}
+
+	static bool TryGetEventSignature(UIClass controlType, const std::wstring& eventName,
+		std::string& outEventField, std::string& outParamList)
+	{
+		std::wstring n = eventName;
+		if (n == L"OnMouseWheel") { outEventField = "OnMouseWheel"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseMove") { outEventField = "OnMouseMove"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseUp") { outEventField = "OnMouseUp"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseDown") { outEventField = "OnMouseDown"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseClick") { outEventField = "OnMouseClick"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseDoubleClick") { outEventField = "OnMouseDoubleClick"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseEnter") { outEventField = "OnMouseEnter"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseLeaved") { outEventField = "OnMouseLeaved"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnKeyDown") { outEventField = "OnKeyDown"; outParamList = "Control* sender, KeyEventArgs e"; return true; }
+		if (n == L"OnKeyUp") { outEventField = "OnKeyUp"; outParamList = "Control* sender, KeyEventArgs e"; return true; }
+		if (n == L"OnCharInput") { outEventField = "OnCharInput"; outParamList = "Control* sender, wchar_t ch"; return true; }
+		if (n == L"OnGotFocus") { outEventField = "OnGotFocus"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnLostFocus") { outEventField = "OnLostFocus"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnDropFile") { outEventField = "OnDropFile"; outParamList = "Control* sender, List<std::wstring> files"; return true; }
+		if (n == L"OnDropText") { outEventField = "OnDropText"; outParamList = "Control* sender, std::wstring text"; return true; }
+		if (n == L"OnPaint") { outEventField = "OnPaint"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnClose") { outEventField = "OnClose"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnMoved") { outEventField = "OnMoved"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnSizeChanged") { outEventField = "OnSizeChanged"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnTextChanged") { outEventField = "OnTextChanged"; outParamList = "Control* sender, std::wstring oldText, std::wstring newText"; return true; }
+		if (n == L"OnChecked") { outEventField = "OnChecked"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnSelectionChanged") { outEventField = "OnSelectionChanged"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnSelectedChanged") { outEventField = "OnSelectedChanged"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnScrollChanged") { outEventField = "OnScrollChanged"; outParamList = "Control* sender"; return true; }
+		if (n == L"ScrollChanged") { outEventField = "ScrollChanged"; outParamList = "Control* sender"; return true; }
+		if (n == L"SelectionChanged") { outEventField = "SelectionChanged"; outParamList = "Control* sender"; return true; }
+		if (n == L"OnValueChanged")
+		{
+			if (controlType != UIClass::UI_Slider) return false;
+			outEventField = "OnValueChanged";
+			outParamList = "Control* sender, float oldValue, float newValue";
+			return true;
+		}
+		if (n == L"OnMenuCommand")
+		{
+			if (controlType != UIClass::UI_Menu) return false;
+			outEventField = "OnMenuCommand";
+			outParamList = "Control* sender, int id";
+			return true;
+		}
+		if (n == L"OnGridViewCheckStateChanged")
+		{
+			if (controlType != UIClass::UI_GridView) return false;
+			outEventField = "OnGridViewCheckStateChanged";
+			outParamList = "GridView* sender, int c, int r, bool v";
+			return true;
+		}
+		return false;
+	}
+
+	static bool TryGetFormEventSignature(const std::wstring& eventName,
+		std::string& outEventField, std::string& outParamList)
+	{
+		std::wstring n = eventName;
+		if (n == L"OnMouseWheel") { outEventField = "OnMouseWheel"; outParamList = "Form* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseMove") { outEventField = "OnMouseMove"; outParamList = "Form* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseUp") { outEventField = "OnMouseUp"; outParamList = "Form* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseDown") { outEventField = "OnMouseDown"; outParamList = "Form* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseClick") { outEventField = "OnMouseClick"; outParamList = "Form* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnKeyDown") { outEventField = "OnKeyDown"; outParamList = "Form* sender, KeyEventArgs e"; return true; }
+		if (n == L"OnKeyUp") { outEventField = "OnKeyUp"; outParamList = "Form* sender, KeyEventArgs e"; return true; }
+		if (n == L"OnPaint") { outEventField = "OnPaint"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnMoved") { outEventField = "OnMoved"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnSizeChanged") { outEventField = "OnSizeChanged"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnTextChanged") { outEventField = "OnTextChanged"; outParamList = "Form* sender, std::wstring oldText, std::wstring newText"; return true; }
+		if (n == L"OnCharInput") { outEventField = "OnCharInput"; outParamList = "Form* sender, wchar_t ch"; return true; }
+		if (n == L"OnGotFocus") { outEventField = "OnGotFocus"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnLostFocus") { outEventField = "OnLostFocus"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnDropFile") { outEventField = "OnDropFile"; outParamList = "Form* sender, List<std::wstring> files"; return true; }
+		if (n == L"OnDropText") { outEventField = "OnDropText"; outParamList = "Form* sender, std::wstring text"; return true; }
+		if (n == L"OnFormClosing") { outEventField = "OnFormClosing"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnFormClosed") { outEventField = "OnFormClosed"; outParamList = "Form* sender"; return true; }
+		if (n == L"OnCommand") { outEventField = "OnCommand"; outParamList = "Form* sender, int Id, int info"; return true; }
+
+		if (n == L"OnMouseDoubleClick") { outEventField = "OnMouseDoubleClick"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseEnter") { outEventField = "OnMouseEnter"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnMouseLeaved") { outEventField = "OnMouseLeaved"; outParamList = "Control* sender, MouseEventArgs e"; return true; }
+		if (n == L"OnClose") { outEventField = "OnClose"; outParamList = "Control* sender"; return true; }
+		return false;
+	}
+
+	static std::string EnsureOnPrefix(std::string s)
+	{
+		if (s.rfind("On", 0) == 0) return s;
+		return std::string("On") + s;
+	}
+
+	static std::string MakeHandlerName(const std::string& controlVar, const std::wstring& eventName)
+	{
+		std::string raw;
+		if (!eventName.empty())
+		{
+			int size = WideCharToMultiByte(CP_UTF8, 0, eventName.data(), (int)eventName.size(), NULL, 0, NULL, NULL);
+			raw.resize(std::max(0, size));
+			if (size > 0)
+				WideCharToMultiByte(CP_UTF8, 0, eventName.data(), (int)eventName.size(), raw.data(), size, NULL, NULL);
+		}
+		std::string suffix = EnsureOnPrefix(LocalSanitizeCppIdentifier(raw));
+		return controlVar + "_" + suffix;
+	}
+}
+
 CodeGenerator::CodeGenerator(std::wstring className, const std::vector<std::shared_ptr<DesignerControl>>& controls,
-	std::wstring formText, SIZE formSize, POINT formLocation,
+	std::wstring formText, SIZE formSize, POINT formLocation, std::wstring formName,
+	D2D1_COLOR_F formBackColor, D2D1_COLOR_F formForeColor,
+	bool formShowInTaskBar, bool formTopMost, bool formEnable, bool formVisible,
+	const std::map<std::wstring, std::wstring>& formEventHandlers,
 	bool formVisibleHead, int formHeadHeight,
 	bool formMinBox, bool formMaxBox, bool formCloseBox,
 	bool formCenterTitle, bool formAllowResize)
-	: _className(className), _controls(controls), _formText(formText), _formSize(formSize), _formLocation(formLocation),
+	: _className(className), _controls(controls), _formText(formText), _formName(formName), _formSize(formSize), _formLocation(formLocation),
+	_formBackColor(formBackColor), _formForeColor(formForeColor),
+	_formShowInTaskBar(formShowInTaskBar), _formTopMost(formTopMost), _formEnable(formEnable), _formVisible(formVisible),
+	_formEventHandlers(formEventHandlers),
 	_formVisibleHead(formVisibleHead), _formHeadHeight(formHeadHeight),
 	_formMinBox(formMinBox), _formMaxBox(formMaxBox), _formCloseBox(formCloseBox),
 	_formCenterTitle(formCenterTitle), _formAllowResize(formAllowResize)
@@ -89,7 +229,7 @@ CodeGenerator::CodeGenerator(std::wstring className, const std::vector<std::shar
 	if (_formSize.cx <= 0) _formSize.cx = 800;
 	if (_formSize.cy <= 0) _formSize.cy = 600;
 	if (_formHeadHeight < 0) _formHeadHeight = 0;
-	// 防御：避免生成一个极端位置导致窗体不可见
+	if (_formName.empty()) _formName = L"MainForm";
 	if (_formLocation.x < -10000) _formLocation.x = -10000;
 	if (_formLocation.y < -10000) _formLocation.y = -10000;
 	if (_formLocation.x > 10000) _formLocation.x = 10000;
@@ -134,7 +274,6 @@ std::string CodeGenerator::SanitizeCppIdentifier(const std::string& raw)
 	// 不能空
 	if (out.empty()) out = "control";
 
-	// 避免关键字
 	if (IsCppKeyword(out)) out += "_";
 
 	return out;
@@ -855,6 +994,51 @@ std::string CodeGenerator::GenerateHeader()
 		std::string typeName = GetControlTypeName(dc->Type);
 		header << "\t" << typeName << "* " << name << ";\n";
 	}
+
+	// 声明事件处理函数（勾选启用；命名：{controlName}_OnXxx）
+	{
+		std::unordered_map<std::string, std::string> sigOf;
+		std::vector<std::pair<std::string, std::string>> decls;
+		std::string formPrefix = SanitizeCppIdentifier(WStringToString(_formName));
+
+		// Form 事件：命名固定 Form_OnXxx
+		for (const auto& kv : _formEventHandlers)
+		{
+			if (kv.first.empty()) continue;
+			if (kv.second.empty()) continue;
+			std::string evField, params;
+			if (!TryGetFormEventSignature(kv.first, evField, params)) continue;
+			std::string handlerName = MakeHandlerName(formPrefix, kv.first);
+			auto itSig = sigOf.find(handlerName);
+			if (itSig != sigOf.end() && itSig->second != params) continue;
+			sigOf[handlerName] = params;
+			decls.push_back({ handlerName, params });
+		}
+
+		for (const auto& dc : _controls)
+		{
+			if (!dc) continue;
+			for (const auto& kv : dc->EventHandlers)
+			{
+				const auto& evNameW = kv.first;
+				// value 仅代表“启用”（新格式会是 "1" 或旧格式 handlerName）
+				if (kv.second.empty()) continue;
+				std::string evField, params;
+				if (!TryGetEventSignature(dc->Type, evNameW, evField, params)) continue;
+				std::string handlerName = MakeHandlerName(GetVarName(dc), evNameW);
+				auto itSig = sigOf.find(handlerName);
+				if (itSig != sigOf.end() && itSig->second != params) continue;
+				sigOf[handlerName] = params;
+				decls.push_back({ handlerName, params });
+			}
+		}
+		if (!decls.empty())
+		{
+			header << "\n";
+			for (const auto& d : decls)
+				header << "\tvoid " << d.first << "(" << d.second << ");\n";
+		}
+	}
 	
 	header << "\n";
 	header << "public:\n";
@@ -871,7 +1055,8 @@ std::string CodeGenerator::GenerateCpp()
 	std::string className = WStringToString(_className);
 	
 	// 包含头文件
-	cpp << "#include \"" << className << ".h\"\n\n";
+	cpp << "#include \"" << className << ".h\"\n";
+	cpp << "#include <functional>\n\n";
 	
 	// 构造函数（注意：本框架的窗体初始化应走 Form 基类构造函数参数，
 	// 在构造函数体内直接写 this->Text/Size/Location 可能不会生效。）
@@ -890,6 +1075,14 @@ std::string CodeGenerator::GenerateCpp()
 	cpp << "\tthis->CloseBox = " << (_formCloseBox ? "true" : "false") << ";\n";
 	cpp << "\tthis->CenterTitle = " << (_formCenterTitle ? "true" : "false") << ";\n";
 	cpp << "\tthis->AllowResize = " << (_formAllowResize ? "true" : "false") << ";\n\n";
+
+	cpp << "\t// 窗体属性（通用）\n";
+	cpp << "\tthis->BackColor = " << ColorToString(_formBackColor) << ";\n";
+	cpp << "\tthis->ForeColor = " << ColorToString(_formForeColor) << ";\n";
+	cpp << "\tthis->ShowInTaskBar = " << (_formShowInTaskBar ? "true" : "false") << ";\n";
+	cpp << "\tthis->TopMost = " << (_formTopMost ? "true" : "false") << ";\n";
+	cpp << "\tthis->Enable = " << (_formEnable ? "true" : "false") << ";\n";
+	cpp << "\tthis->Visible = " << (_formVisible ? "true" : "false") << ";\n\n";
 	
 	cpp << "\t// 创建控件\n";
 
@@ -901,6 +1094,56 @@ std::string CodeGenerator::GenerateCpp()
 		cpp << GenerateContainerProperties(dc, 1);
 		if (dc && dc->ControlInstance && dc->Type != UIClass::UI_TabPage)
 			cpp << "\n";
+	}
+
+	// 事件绑定（使用 std::bind_front 绑定到类成员函数；命名：{controlName}_OnXxx）
+	{
+		std::unordered_map<std::string, std::string> sigOf;
+		std::vector<GeneratedEventBinding> binds;
+		binds.reserve(_controls.size());
+		std::string formPrefix = SanitizeCppIdentifier(WStringToString(_formName));
+
+		// Form 事件
+		for (const auto& kv : _formEventHandlers)
+		{
+			if (kv.first.empty()) continue;
+			if (kv.second.empty()) continue;
+			std::string evField, params;
+			if (!TryGetFormEventSignature(kv.first, evField, params)) continue;
+			std::string handlerName = MakeHandlerName(formPrefix, kv.first);
+			auto itSig = sigOf.find(handlerName);
+			if (itSig != sigOf.end() && itSig->second != params) continue;
+			sigOf[handlerName] = params;
+			binds.push_back(GeneratedEventBinding{ "this", evField, handlerName, params });
+		}
+
+		for (const auto& dc : _controls)
+		{
+			if (!dc) continue;
+			std::string ctrlVar = GetVarName(dc);
+			for (const auto& kv : dc->EventHandlers)
+			{
+				const auto& evNameW = kv.first;
+				if (kv.second.empty()) continue;
+				std::string evField, params;
+				if (!TryGetEventSignature(dc->Type, evNameW, evField, params)) continue;
+				std::string handlerName = MakeHandlerName(ctrlVar, evNameW);
+				auto itSig = sigOf.find(handlerName);
+				if (itSig != sigOf.end() && itSig->second != params) continue;
+				sigOf[handlerName] = params;
+				binds.push_back(GeneratedEventBinding{ ctrlVar, evField, handlerName, params });
+			}
+		}
+
+		if (!binds.empty())
+		{
+			cpp << "\t// 绑定事件\n";
+			for (const auto& b : binds)
+			{
+				cpp << "\t" << b.ControlVar << "->" << b.EventField << " += std::bind_front(&" << className << "::" << b.HandlerName << ", this);\n";
+			}
+			cpp << "\n";
+		}
 	}
 
 	// 2) 按 DesignerParent 组装层级（容器内应为 container->AddControl）
@@ -1086,6 +1329,77 @@ std::string CodeGenerator::GenerateCpp()
 	cpp << className << "::~" << className << "()\n";
 	cpp << "{\n";
 	cpp << "}\n";
+
+	// 事件处理函数定义
+	{
+		std::unordered_map<std::string, std::string> sigOf;
+		std::vector<std::pair<std::string, std::string>> defs;
+		std::string formPrefix = SanitizeCppIdentifier(WStringToString(_formName));
+
+		// Form 事件
+		for (const auto& kv : _formEventHandlers)
+		{
+			if (kv.first.empty()) continue;
+			if (kv.second.empty()) continue;
+			std::string evField, params;
+			if (!TryGetFormEventSignature(kv.first, evField, params)) continue;
+			std::string handlerName = MakeHandlerName(formPrefix, kv.first);
+			auto itSig = sigOf.find(handlerName);
+			if (itSig != sigOf.end() && itSig->second != params) continue;
+			sigOf[handlerName] = params;
+			defs.push_back({ handlerName, params });
+		}
+
+		for (const auto& dc : _controls)
+		{
+			if (!dc) continue;
+			for (const auto& kv : dc->EventHandlers)
+			{
+				const auto& evNameW = kv.first;
+				if (kv.second.empty()) continue;
+				std::string evField, params;
+				if (!TryGetEventSignature(dc->Type, evNameW, evField, params)) continue;
+				std::string handlerName = MakeHandlerName(GetVarName(dc), evNameW);
+				auto itSig = sigOf.find(handlerName);
+				if (itSig != sigOf.end() && itSig->second != params) continue;
+				sigOf[handlerName] = params;
+				defs.push_back({ handlerName, params });
+			}
+		}
+
+		if (!defs.empty())
+		{
+			cpp << "\n";
+			for (const auto& d : defs)
+			{
+				cpp << "void " << className << "::" << d.first << "(" << d.second << ")\n";
+				cpp << "{\n";
+				// 避免未使用参数警告
+				if (d.second.find("MouseEventArgs") != std::string::npos)
+					cpp << "\t(void)sender; (void)e;\n";
+				else if (d.second.find("KeyEventArgs") != std::string::npos)
+					cpp << "\t(void)sender; (void)e;\n";
+				else if (d.second.find("List<std::wstring>") != std::string::npos)
+					cpp << "\t(void)sender; (void)files;\n";
+				else if (d.second.find("std::wstring") != std::string::npos)
+				{
+					if (d.second.find("oldText") != std::string::npos)
+						cpp << "\t(void)sender; (void)oldText; (void)newText;\n";
+					else
+						cpp << "\t(void)sender; (void)text;\n";
+				}
+				else if (d.second.find("wchar_t") != std::string::npos)
+					cpp << "\t(void)sender; (void)ch;\n";
+				else if (d.second.find("int Id") != std::string::npos)
+					cpp << "\t(void)sender; (void)Id; (void)info;\n";
+				else if (d.second.find("GridView*") != std::string::npos)
+					cpp << "\t(void)sender; (void)c; (void)r; (void)v;\n";
+				else
+					cpp << "\t(void)sender;\n";
+				cpp << "}\n\n";
+			}
+		}
+	}
 	
 	return cpp.str();
 }

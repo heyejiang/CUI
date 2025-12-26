@@ -33,6 +33,7 @@ class ToolBox : public Panel
 private:
 	std::vector<ToolBoxItem*> _items;
 	class Label* _titleLabel = nullptr;
+	Panel* _itemsHost = nullptr;
 	int _contentTop = 45;
 	int _contentBottomPadding = 10;
 	int _scrollOffsetY = 0;

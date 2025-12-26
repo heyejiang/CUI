@@ -4,15 +4,24 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <map>
 
 class DesignerCanvas : public Panel
 {
 private:
 	Panel* _designSurface = nullptr;
 	Panel* _clientSurface = nullptr;
+	std::wstring _designedFormName = L"MainForm";
 	std::wstring _designedFormText = L"Form";
 	SIZE _designedFormSize = { 800, 600 };
 	POINT _designedFormLocation = { 100, 100 };
+	D2D1_COLOR_F _designedFormBackColor = Colors::WhiteSmoke;
+	D2D1_COLOR_F _designedFormForeColor = Colors::Black;
+	bool _designedFormShowInTaskBar = true;
+	bool _designedFormTopMost = false;
+	bool _designedFormEnable = true;
+	bool _designedFormVisible = true;
+	std::map<std::wstring, std::wstring> _designedFormEventHandlers;
 	bool _designedFormVisibleHead = true;
 	int _designedFormHeadHeight = 24;
 	bool _designedFormMinBox = true;
@@ -106,8 +115,29 @@ public:
 	// 当外部（属性面板）修改 Name 后，同步默认命名计数器（按类型）。
 	void SyncDefaultNameCounter(UIClass type, const std::wstring& name) { UpdateDefaultNameCounterFromName(type, name); }
 
+	std::wstring GetDesignedFormName() const { return _designedFormName; }
+	void SetDesignedFormName(const std::wstring& n) { _designedFormName = n; }
 	std::wstring GetDesignedFormText() const { return _designedFormText; }
 	void SetDesignedFormText(const std::wstring& t) { _designedFormText = t; this->PostRender(); }
+	D2D1_COLOR_F GetDesignedFormBackColor() const { return _designedFormBackColor; }
+	void SetDesignedFormBackColor(D2D1_COLOR_F c) { _designedFormBackColor = c; if (_clientSurface) _clientSurface->BackColor = c; this->PostRender(); }
+	D2D1_COLOR_F GetDesignedFormForeColor() const { return _designedFormForeColor; }
+	void SetDesignedFormForeColor(D2D1_COLOR_F c) { _designedFormForeColor = c; this->PostRender(); }
+	bool GetDesignedFormShowInTaskBar() const { return _designedFormShowInTaskBar; }
+	void SetDesignedFormShowInTaskBar(bool v) { _designedFormShowInTaskBar = v; }
+	bool GetDesignedFormTopMost() const { return _designedFormTopMost; }
+	void SetDesignedFormTopMost(bool v) { _designedFormTopMost = v; }
+	bool GetDesignedFormEnable() const { return _designedFormEnable; }
+	void SetDesignedFormEnable(bool v) { _designedFormEnable = v; }
+	bool GetDesignedFormVisible() const { return _designedFormVisible; }
+	void SetDesignedFormVisible(bool v) { _designedFormVisible = v; }
+	const std::map<std::wstring, std::wstring>& GetDesignedFormEventHandlers() const { return _designedFormEventHandlers; }
+	bool GetDesignedFormEventEnabled(const std::wstring& eventName) const { return _designedFormEventHandlers.find(eventName) != _designedFormEventHandlers.end(); }
+	void SetDesignedFormEventEnabled(const std::wstring& eventName, bool enabled)
+	{
+		if (enabled) _designedFormEventHandlers[eventName] = L"1";
+		else _designedFormEventHandlers.erase(eventName);
+	}
 	SIZE GetDesignedFormSize() const { return _designedFormSize; }
 	void SetDesignedFormSize(SIZE s);
 	POINT GetDesignedFormLocation() const { return _designedFormLocation; }

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <map>
 
 class CodeGenerator
 {
@@ -13,8 +14,16 @@ private:
 	std::wstring _className;
 	std::vector<std::shared_ptr<DesignerControl>> _controls;
 	std::wstring _formText;
+	std::wstring _formName = L"MainForm";
 	SIZE _formSize = { 800, 600 };
 	POINT _formLocation = { 100, 100 };
+	D2D1_COLOR_F _formBackColor = Colors::WhiteSmoke;
+	D2D1_COLOR_F _formForeColor = Colors::Black;
+	bool _formShowInTaskBar = true;
+	bool _formTopMost = false;
+	bool _formEnable = true;
+	bool _formVisible = true;
+	std::map<std::wstring, std::wstring> _formEventHandlers;
 	bool _formVisibleHead = true;
 	int _formHeadHeight = 24;
 	bool _formMinBox = true;
@@ -48,7 +57,10 @@ private:
 	
 public:
 	CodeGenerator(std::wstring className, const std::vector<std::shared_ptr<DesignerControl>>& controls,
-		std::wstring formText = L"", SIZE formSize = SIZE{ 800, 600 }, POINT formLocation = POINT{ 100, 100 },
+		std::wstring formText = L"", SIZE formSize = SIZE{ 800, 600 }, POINT formLocation = POINT{ 100, 100 }, std::wstring formName = L"MainForm",
+		D2D1_COLOR_F formBackColor = Colors::WhiteSmoke, D2D1_COLOR_F formForeColor = Colors::Black,
+		bool formShowInTaskBar = true, bool formTopMost = false, bool formEnable = true, bool formVisible = true,
+		const std::map<std::wstring, std::wstring>& formEventHandlers = std::map<std::wstring, std::wstring>{},
 		bool formVisibleHead = true, int formHeadHeight = 24,
 		bool formMinBox = true, bool formMaxBox = true, bool formCloseBox = true,
 		bool formCenterTitle = true, bool formAllowResize = true);

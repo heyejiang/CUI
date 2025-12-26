@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <commdlg.h>
 #include <commctrl.h>
+#include <map>
 
 namespace
 {
@@ -300,34 +301,47 @@ void Designer::OnExportClick()
 
 	if (dialogResult == DialogResult::OK)
 	{
-		std::wstring headerPath = Convert::string_to_wstring(saveFileDialog.SelectedPath);
-		std::wstring cppPath = headerPath;
-		
-		// 替换扩展名
-		size_t pos = cppPath.find_last_of(L'.');
-		if (pos != std::wstring::npos)
+		std::wstring selectedPath = Convert::string_to_wstring(saveFileDialog.SelectedPath);
+		if (selectedPath.empty())
+			return;
+
+		std::wstring basePath = selectedPath;
+		size_t lastSlash = basePath.find_last_of(L"\\/");
+		size_t lastDot = basePath.find_last_of(L'.');
+		bool hasExt = (lastDot != std::wstring::npos)
+			&& (lastDot != basePath.size() - 1)
+			&& ((lastSlash == std::wstring::npos) || (lastDot > lastSlash + 1));
+		if (hasExt)
 		{
-			cppPath = cppPath.substr(0, pos) + L".cpp";
+			basePath = basePath.substr(0, lastDot);
 		}
-		
-		// 从文件名提取类名
-		std::wstring fileName = headerPath;
-		size_t lastSlash = fileName.find_last_of(L"\\/");
+		else
+		{
+			if (!basePath.empty() && basePath.back() == L'.')
+				basePath.pop_back();
+		}
+
+		std::wstring headerPath = basePath + L".h";
+		std::wstring cppPath = basePath + L".cpp";
+
+		std::wstring fileName = basePath;
+		lastSlash = fileName.find_last_of(L"\\/");
 		if (lastSlash != std::wstring::npos)
-		{
 			fileName = fileName.substr(lastSlash + 1);
-		}
-		pos = fileName.find_last_of(L'.');
-		if (pos != std::wstring::npos)
-		{
-			fileName = fileName.substr(0, pos);
-		}
 		
 		// 生成代码（包含窗体标题/尺寸）
 		CodeGenerator generator(fileName, controls,
 			_canvas ? _canvas->GetDesignedFormText() : L"",
 			_canvas ? _canvas->GetDesignedFormSize() : SIZE{ 800, 600 },
 			_canvas ? _canvas->GetDesignedFormLocation() : POINT{ 100, 100 },
+			_canvas ? _canvas->GetDesignedFormName() : L"MainForm",
+			_canvas ? _canvas->GetDesignedFormBackColor() : Colors::WhiteSmoke,
+			_canvas ? _canvas->GetDesignedFormForeColor() : Colors::Black,
+			_canvas ? _canvas->GetDesignedFormShowInTaskBar() : true,
+			_canvas ? _canvas->GetDesignedFormTopMost() : false,
+			_canvas ? _canvas->GetDesignedFormEnable() : true,
+			_canvas ? _canvas->GetDesignedFormVisible() : true,
+			_canvas ? _canvas->GetDesignedFormEventHandlers() : std::map<std::wstring, std::wstring>{},
 			_canvas ? _canvas->GetDesignedFormVisibleHead() : true,
 			_canvas ? _canvas->GetDesignedFormHeadHeight() : 24,
 			_canvas ? _canvas->GetDesignedFormMinBox() : true,

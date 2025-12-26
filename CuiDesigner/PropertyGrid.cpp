@@ -16,13 +16,17 @@
 #include "../CUI/GUI/TreeView.h"
 #include "../CUI/GUI/TabControl.h"
 #include "../CUI/GUI/ToolBar.h"
+#include "../CUI/GUI/StatusBar.h"
 #include "../CUI/GUI/Layout/StackPanel.h"
 #include "../CUI/GUI/Layout/WrapPanel.h"
+#include "../CUI/GUI/Layout/DockPanel.h"
 #include <commdlg.h>
+#include <windowsx.h>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 #pragma comment(lib, "Comdlg32.lib")
 
@@ -283,6 +287,160 @@ namespace
 		default: return L"Zoom";
 		}
 	}
+
+	static const std::set<std::wstring>& KnownEventPropertyNames()
+	{
+		static const std::set<std::wstring> k = {
+			L"OnMouseWheel",
+			L"OnMouseMove",
+			L"OnMouseDown",
+			L"OnMouseUp",
+			L"OnMouseClick",
+			L"OnMouseDoubleClick",
+			L"OnMouseEnter",
+			L"OnMouseLeaved",
+			L"OnKeyDown",
+			L"OnKeyUp",
+			L"OnCharInput",
+			L"OnGotFocus",
+			L"OnLostFocus",
+			L"OnDropFile",
+			L"OnDropText",
+			L"OnPaint",
+			L"OnClose",
+			L"OnMoved",
+			L"OnSizeChanged",
+			L"OnTextChanged",
+			L"OnFormClosing",
+			L"OnFormClosed",
+			L"OnCommand",
+			L"OnChecked",
+			L"OnSelectionChanged",
+			L"OnSelectedChanged",
+			L"OnScrollChanged",
+			L"ScrollChanged",
+			L"SelectionChanged",
+			L"OnGridViewCheckStateChanged",
+			L"OnValueChanged",
+			L"OnMenuCommand",
+		};
+		return k;
+	}
+
+	static bool IsEventPropertyName(const std::wstring& name)
+	{
+		return KnownEventPropertyNames().find(name) != KnownEventPropertyNames().end();
+	}
+
+	static std::vector<std::wstring> GetEventPropertiesFor(UIClass type)
+	{
+		std::vector<std::wstring> out;
+
+		out.push_back(L"OnMouseWheel");
+		out.push_back(L"OnMouseMove");
+		out.push_back(L"OnMouseDown");
+		out.push_back(L"OnMouseUp");
+		out.push_back(L"OnMouseClick");
+		out.push_back(L"OnMouseDoubleClick");
+		out.push_back(L"OnMouseEnter");
+		out.push_back(L"OnMouseLeaved");
+		out.push_back(L"OnKeyDown");
+		out.push_back(L"OnKeyUp");
+		out.push_back(L"OnCharInput");
+		out.push_back(L"OnGotFocus");
+		out.push_back(L"OnLostFocus");
+		out.push_back(L"OnDropText");
+		out.push_back(L"OnDropFile");
+		out.push_back(L"OnPaint");
+		out.push_back(L"OnClose");
+		out.push_back(L"OnMoved");
+		out.push_back(L"OnSizeChanged");
+		out.push_back(L"OnSelectedChanged");
+		out.push_back(L"OnScrollChanged");
+
+		switch (type)
+		{
+		case UIClass::UI_TextBox:
+		case UIClass::UI_RichTextBox:
+		case UIClass::UI_PasswordBox:
+			out.push_back(L"OnTextChanged");
+			break;
+		case UIClass::UI_CheckBox:
+		case UIClass::UI_RadioBox:
+		case UIClass::UI_Switch:
+			out.push_back(L"OnChecked");
+			break;
+		case UIClass::UI_ComboBox:
+			out.push_back(L"OnSelectionChanged");
+			break;
+		case UIClass::UI_GridView:
+			out.push_back(L"ScrollChanged");
+			out.push_back(L"SelectionChanged");
+			out.push_back(L"OnGridViewCheckStateChanged");
+			break;
+		case UIClass::UI_TreeView:
+			out.push_back(L"ScrollChanged");
+			out.push_back(L"SelectionChanged");
+			break;
+		case UIClass::UI_Slider:
+			out.push_back(L"OnValueChanged");
+			break;
+		case UIClass::UI_Menu:
+			out.push_back(L"OnMenuCommand");
+			break;
+		default:
+			break;
+		}
+		return out;
+	}
+
+	static std::vector<std::wstring> GetFormEventProperties()
+	{
+		return {
+			L"OnMouseWheel",
+			L"OnMouseMove",
+			L"OnMouseDown",
+			L"OnMouseUp",
+			L"OnMouseClick",
+			L"OnMouseDoubleClick",
+			L"OnMouseEnter",
+			L"OnMouseLeaved",
+			L"OnKeyDown",
+			L"OnKeyUp",
+			L"OnCharInput",
+			L"OnGotFocus",
+			L"OnLostFocus",
+			L"OnDropText",
+			L"OnDropFile",
+			L"OnPaint",
+			L"OnClose",
+			L"OnMoved",
+			L"OnSizeChanged",
+			L"OnTextChanged",
+			L"OnFormClosing",
+			L"OnFormClosed",
+			L"OnCommand",
+		};
+	}
+}
+
+void PropertyGrid::CreateEventBoolPropertyItem(std::wstring eventName, bool enabled, int& yOffset)
+{
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
+
+	auto cb = new CheckBox(eventName, 10, yOffset);
+	cb->Size = { width - 20, 20 };
+	cb->Checked = enabled;
+	cb->ParentForm = this->ParentForm;
+	cb->OnMouseClick += [this, eventName](Control* sender, MouseEventArgs) {
+		auto box = (CheckBox*)sender;
+		UpdatePropertyFromBool(eventName, box->Checked);
+	};
+	container->AddControl(cb);
+	RegisterScrollable(cb);
+	_items.push_back(new PropertyItem(eventName, nullptr, cb));
+	yOffset += 25;
 }
 
 PropertyGrid::PropertyGrid(int x, int y, int width, int height)
@@ -296,23 +454,249 @@ PropertyGrid::PropertyGrid(int x, int y, int width, int height)
 	_titleLabel->Size = { width - 20, 25 };
 	_titleLabel->Font = new ::Font(L"Microsoft YaHei", 16.0f);
 	this->AddControl(_titleLabel);
+
+
+	_contentHost = new Panel(0, _contentTop, width, std::max(0, height - _contentTop));
+	_contentHost->BackColor = this->BackColor;
+	_contentHost->Boder = 0.0f;
+	UpdateContentHostLayout();
+	this->AddControl(_contentHost);
 }
 
 PropertyGrid::~PropertyGrid()
 {
 }
 
+void PropertyGrid::RegisterScrollable(Control* c)
+{
+	if (!c) return;
+	if (c == _titleLabel) return;
+	if (c == _contentHost) return;
+	if (_contentHost && c->Parent == _contentHost)
+	{
+		_scrollEntries.push_back(ScrollEntry{ c, c->Top });
+		return;
+	}
+	// 只对内容区控件做滚动（Top>=contentTop）
+	if (c->Top < _contentTop) return;
+	_scrollEntries.push_back(ScrollEntry{ c, c->Top });
+}
+
+Panel* PropertyGrid::GetContentContainer()
+{
+	return _contentHost ? _contentHost : this;
+}
+
+int PropertyGrid::GetContentTopLocal()
+{
+	return _contentHost ? 0 : _contentTop;
+}
+
+int PropertyGrid::GetContentWidthLocal()
+{
+	if (!_contentHost) return this->Width;
+	return _contentHost->Width;
+}
+
+int PropertyGrid::GetViewportHeightLocal()
+{
+	if (_contentHost) return _contentHost->Height;
+	return this->Height - _contentTop;
+}
+
+void PropertyGrid::UpdateContentHostLayout()
+{
+	if (!_contentHost) return;
+	const int trackWidth = 10;
+	const int trackPad = 2;
+	const int gap = 4;
+	int reservedRight = trackWidth + trackPad + gap;
+	int w = std::max(0, this->Width - reservedRight);
+	int h = std::max(0, this->Height - _contentTop);
+	_contentHost->Left = 0;
+	_contentHost->Top = _contentTop;
+	_contentHost->Width = w;
+	_contentHost->Height = h;
+}
+
+void PropertyGrid::ClampScroll()
+{
+	int viewport = GetViewportHeightLocal();
+	if (viewport < 0) viewport = 0;
+	int maxScroll = std::max(0, _contentHeight - viewport);
+	_scrollOffsetY = std::clamp(_scrollOffsetY, 0, maxScroll);
+}
+
+void PropertyGrid::UpdateScrollLayout()
+{
+	UpdateContentHostLayout();
+	int contentTop = GetContentTopLocal();
+	int maxBottom = contentTop;
+	for (const auto& e : _scrollEntries)
+	{
+		if (!e.ControlPtr) continue;
+		maxBottom = std::max(maxBottom, e.BaseY + e.ControlPtr->Height);
+	}
+	_contentHeight = (maxBottom - contentTop) + _contentBottomPadding;
+	ClampScroll();
+
+	for (auto& e : _scrollEntries)
+	{
+		if (!e.ControlPtr) continue;
+		e.ControlPtr->Top = e.BaseY - _scrollOffsetY;
+	}
+}
+
+bool PropertyGrid::TryGetScrollBarLocalRect(D2D1_RECT_F& outTrack, D2D1_RECT_F& outThumb)
+{
+	const float trackWidth = 10.0f;
+	const float trackPad = 2.0f;
+	float viewport = (float)std::max(0, GetViewportHeightLocal());
+	if (_contentHeight <= 0 || viewport <= 0.0f) return false;
+	if ((float)_contentHeight <= viewport) return false;
+
+	outTrack = D2D1_RECT_F{
+		(float)this->Width - trackWidth - trackPad,
+		(float)_contentTop,
+		(float)this->Width - trackPad,
+		(float)this->Height - trackPad,
+	};
+
+	float trackHeight = std::max(0.0f, outTrack.bottom - outTrack.top);
+	if (trackHeight <= 0.0f) return false;
+
+	float ratio = viewport / (float)_contentHeight;
+	float thumbHeight = std::max(16.0f, trackHeight * ratio);
+	float maxScroll = (float)std::max(1, _contentHeight - (int)viewport);
+	float scroll01 = (float)_scrollOffsetY / maxScroll;
+	float thumbTop = outTrack.top + (trackHeight - thumbHeight) * scroll01;
+
+	outThumb = D2D1_RECT_F{ outTrack.left, thumbTop, outTrack.right, thumbTop + thumbHeight };
+	return true;
+}
+
+void PropertyGrid::Update()
+{
+	UpdateContentHostLayout();
+	UpdateScrollLayout();
+	Panel::Update();
+
+	if (!this->ParentForm || !this->ParentForm->Render) return;
+	D2D1_RECT_F track{}, thumb{};
+	if (!TryGetScrollBarLocalRect(track, thumb)) return;
+
+	auto d2d = this->ParentForm->Render;
+	auto absRect = this->AbsRect;
+	auto abs = this->AbsLocation;
+	d2d->PushDrawRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top);
+	{
+		D2D1_RECT_F atrack{ track.left + abs.x, track.top + abs.y, track.right + abs.x, track.bottom + abs.y };
+		D2D1_RECT_F athumb{ thumb.left + abs.x, thumb.top + abs.y, thumb.right + abs.x, thumb.bottom + abs.y };
+		d2d->FillRect(atrack.left, atrack.top, atrack.right - atrack.left, atrack.bottom - atrack.top, Colors::LightGray);
+		d2d->FillRect(athumb.left, athumb.top, athumb.right - athumb.left, athumb.bottom - athumb.top, Colors::DimGrey);
+	}
+	d2d->PopDrawRect();
+}
+
+bool PropertyGrid::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof)
+{
+	Panel::ProcessMessage(message, wParam, lParam, xof, yof);
+
+	switch (message)
+	{
+	case WM_MOUSEWHEEL:
+	{
+		int viewport = GetViewportHeightLocal();
+		if (_contentHeight > viewport)
+		{
+			int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+			int step = 25;
+			_scrollOffsetY -= (delta / 120) * step;
+			ClampScroll();
+			UpdateScrollLayout();
+			this->PostRender();
+		}
+		return true;
+	}
+	case WM_LBUTTONDOWN:
+	{
+		D2D1_RECT_F track{}, thumb{};
+		if (TryGetScrollBarLocalRect(track, thumb))
+		{
+			if (xof >= (int)track.left && xof <= (int)track.right && yof >= (int)track.top && yof <= (int)track.bottom)
+			{
+				if (yof >= (int)thumb.top && yof <= (int)thumb.bottom)
+				{
+					_draggingScrollThumb = true;
+					_dragStartMouseY = yof;
+					_dragStartScrollY = _scrollOffsetY;
+					if (this->ParentForm) this->ParentForm->Selected = this;
+					return true;
+				}
+				else
+				{
+					int viewport = this->Height - _contentTop;
+					if (yof < (int)thumb.top) _scrollOffsetY -= viewport;
+					else _scrollOffsetY += viewport;
+					ClampScroll();
+					UpdateScrollLayout();
+					this->PostRender();
+					return true;
+				}
+			}
+		}
+	}
+	break;
+	case WM_MOUSEMOVE:
+	{
+		if (_draggingScrollThumb)
+		{
+			D2D1_RECT_F track{}, thumb{};
+			if (TryGetScrollBarLocalRect(track, thumb))
+			{
+				float viewport = (float)std::max(0, this->Height - _contentTop);
+				float trackHeight = std::max(1.0f, track.bottom - track.top);
+				float thumbHeight = std::max(1.0f, thumb.bottom - thumb.top);
+				float maxThumbMove = std::max(1.0f, trackHeight - thumbHeight);
+				float maxScroll = (float)std::max(1, _contentHeight - (int)viewport);
+				float dy = (float)(yof - _dragStartMouseY);
+				float scrollDy = dy / maxThumbMove * maxScroll;
+				_scrollOffsetY = (int)((float)_dragStartScrollY + scrollDy);
+				ClampScroll();
+				UpdateScrollLayout();
+				this->PostRender();
+				return true;
+			}
+		}
+	}
+	break;
+	case WM_LBUTTONUP:
+	{
+		if (_draggingScrollThumb)
+		{
+			_draggingScrollThumb = false;
+			if (this->ParentForm && this->ParentForm->Selected == this) this->ParentForm->Selected = nullptr;
+			return true;
+		}
+	}
+	break;
+	}
+	return true;
+}
+
 void PropertyGrid::CreatePropertyItem(std::wstring propertyName, std::wstring value, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	// 属性名标签
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	// 确保ParentForm已设置
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	// 值文本框
 	auto valueTextBox = new TextBox(L"", (width - 30) / 2 + 15, yOffset, (width - 30) / 2, 20);
@@ -323,9 +707,10 @@ void PropertyGrid::CreatePropertyItem(std::wstring propertyName, std::wstring va
 		UpdatePropertyFromTextBox(propertyName, newText);
 		};
 
-	this->AddControl(valueTextBox);
+	container->AddControl(valueTextBox);
 	// 确保ParentForm已设置（关键！）
 	valueTextBox->ParentForm = this->ParentForm;
+	RegisterScrollable(valueTextBox);
 
 	auto item = new PropertyItem(propertyName, nameLabel, valueTextBox);
 	_items.push_back(item);
@@ -335,13 +720,15 @@ void PropertyGrid::CreatePropertyItem(std::wstring propertyName, std::wstring va
 
 void PropertyGrid::CreateColorPropertyItem(std::wstring propertyName, const D2D1_COLOR_F& value, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	int valueX = (width - 30) / 2 + 15;
 	int valueW = (width - 30) / 2;
@@ -395,7 +782,8 @@ void PropertyGrid::CreateColorPropertyItem(std::wstring propertyName, const D2D1
 	panel->AddControl(preview);
 	panel->AddControl(tb);
 	panel->AddControl(btn);
-	this->AddControl(panel);
+	container->AddControl(panel);
+	RegisterScrollable(panel);
 
 	_items.push_back(new PropertyItem(propertyName, nameLabel, (Control*)panel));
 
@@ -404,13 +792,15 @@ void PropertyGrid::CreateColorPropertyItem(std::wstring propertyName, const D2D1
 
 void PropertyGrid::CreateThicknessPropertyItem(std::wstring propertyName, const Thickness& value, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	int valueX = (width - 30) / 2 + 15;
 	int valueW = (width - 30) / 2;
@@ -457,7 +847,8 @@ void PropertyGrid::CreateThicknessPropertyItem(std::wstring propertyName, const 
 	panel->AddControl(tbT);
 	panel->AddControl(tbR);
 	panel->AddControl(tbB);
-	this->AddControl(panel);
+	container->AddControl(panel);
+	RegisterScrollable(panel);
 
 	_items.push_back(new PropertyItem(propertyName, nameLabel, (Control*)panel));
 
@@ -466,14 +857,16 @@ void PropertyGrid::CreateThicknessPropertyItem(std::wstring propertyName, const 
 
 void PropertyGrid::CreateBoolPropertyItem(std::wstring propertyName, bool value, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	// 属性名标签
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	// 值复选框（不显示额外文字）
 	auto valueCheckBox = new CheckBox(L"", (width - 30) / 2 + 15, yOffset);
@@ -485,7 +878,8 @@ void PropertyGrid::CreateBoolPropertyItem(std::wstring propertyName, bool value,
 		UpdatePropertyFromBool(propertyName, cb->Checked);
 		};
 
-	this->AddControl(valueCheckBox);
+	container->AddControl(valueCheckBox);
+	RegisterScrollable(valueCheckBox);
 
 	auto item = new PropertyItem(propertyName, nameLabel, valueCheckBox);
 	_items.push_back(item);
@@ -495,13 +889,15 @@ void PropertyGrid::CreateBoolPropertyItem(std::wstring propertyName, bool value,
 
 void PropertyGrid::CreateAnchorPropertyItem(std::wstring propertyName, uint8_t anchorStyles, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	int valueX = (width - 30) / 2 + 15;
 	int valueW = (width - 30) / 2;
@@ -548,7 +944,8 @@ void PropertyGrid::CreateAnchorPropertyItem(std::wstring propertyName, uint8_t a
 	panel->AddControl(cbR);
 	panel->AddControl(cbB);
 
-	this->AddControl(panel);
+	container->AddControl(panel);
+	RegisterScrollable(panel);
 
 	auto item = new PropertyItem(propertyName, nameLabel, (Control*)panel);
 	_items.push_back(item);
@@ -559,13 +956,15 @@ void PropertyGrid::CreateAnchorPropertyItem(std::wstring propertyName, uint8_t a
 void PropertyGrid::CreateEnumPropertyItem(std::wstring propertyName, const std::wstring& value,
 	const std::vector<std::wstring>& options, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	auto valueCombo = new ComboBox(L"", (width - 30) / 2 + 15, yOffset, (width - 30) / 2, 20);
 	valueCombo->ParentForm = this->ParentForm;
@@ -588,7 +987,8 @@ void PropertyGrid::CreateEnumPropertyItem(std::wstring propertyName, const std::
 		UpdatePropertyFromTextBox(propertyName, cb->Text);
 		};
 
-	this->AddControl(valueCombo);
+	container->AddControl(valueCombo);
+	RegisterScrollable(valueCombo);
 
 	auto item = new PropertyItem(propertyName, nameLabel, (Control*)valueCombo);
 	_items.push_back(item);
@@ -599,13 +999,15 @@ void PropertyGrid::CreateEnumPropertyItem(std::wstring propertyName, const std::
 void PropertyGrid::CreateFloatSliderPropertyItem(std::wstring propertyName, float value,
 	float minValue, float maxValue, float step, int& yOffset)
 {
-	int width = this->Width;
+	auto* container = GetContentContainer();
+	int width = GetContentWidthLocal();
 
 	auto nameLabel = new Label(propertyName, 10, yOffset);
 	nameLabel->Size = { (width - 30) / 2, 20 };
 	nameLabel->Font = new ::Font(L"Microsoft YaHei", 12.0f);
-	this->AddControl(nameLabel);
+	container->AddControl(nameLabel);
 	nameLabel->ParentForm = this->ParentForm;
+	RegisterScrollable(nameLabel);
 
 	auto slider = new Slider((width - 30) / 2 + 15, yOffset - 4, (width - 30) / 2, 28);
 	slider->ParentForm = this->ParentForm;
@@ -619,7 +1021,8 @@ void PropertyGrid::CreateFloatSliderPropertyItem(std::wstring propertyName, floa
 		UpdatePropertyFromFloat(propertyName, newValue);
 		};
 
-	this->AddControl(slider);
+	container->AddControl(slider);
+	RegisterScrollable(slider);
 
 	auto item = new PropertyItem(propertyName, nameLabel, (Control*)slider);
 	_items.push_back(item);
@@ -635,9 +1038,23 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 		if (!_canvas) return;
 		try
 		{
-			if (propertyName == L"Text")
+			if (propertyName == L"Name")
+			{
+				_canvas->SetDesignedFormName(value);
+			}
+			else if (propertyName == L"Text")
 			{
 				_canvas->SetDesignedFormText(value);
+			}
+			else if (propertyName == L"BackColor")
+			{
+				D2D1_COLOR_F c;
+				if (TryParseColor(value, c)) _canvas->SetDesignedFormBackColor(c);
+			}
+			else if (propertyName == L"ForeColor")
+			{
+				D2D1_COLOR_F c;
+				if (TryParseColor(value, c)) _canvas->SetDesignedFormForeColor(c);
 			}
 			else if (propertyName == L"HeadHeight")
 			{
@@ -672,6 +1089,17 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 		return;
 	}
 	if (!_currentControl->ControlInstance) return;
+
+	// 事件属性：仅更新设计期映射，不改运行时控件状态
+	if (IsEventPropertyName(propertyName))
+	{
+		auto v = TrimWs(value);
+		if (v.empty())
+			_currentControl->EventHandlers.erase(propertyName);
+		else
+			_currentControl->EventHandlers[propertyName] = std::move(v);
+		return;
+	}
 
 	auto ctrl = _currentControl->ControlInstance;
 
@@ -786,6 +1214,13 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 				auto* tc = (TabControl*)ctrl;
 				tc->SelectIndex = std::stoi(value);
 			}
+			else if (ctrl->Type() == UIClass::UI_ComboBox)
+			{
+				auto* cb = (ComboBox*)ctrl;
+				cb->SelectedIndex = std::stoi(value);
+				if (cb->values.Count > 0 && cb->SelectedIndex >= 0 && cb->SelectedIndex < cb->values.Count)
+					cb->Text = cb->values[cb->SelectedIndex];
+			}
 		}
 		else if (propertyName == L"TitleHeight")
 		{
@@ -862,12 +1297,45 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 		else if (propertyName == L"Gap")
 		{
 			if (ctrl->Type() == UIClass::UI_ToolBar)
-				((ToolBar*)ctrl)->Gap = std::stof(value);
+				((ToolBar*)ctrl)->Gap = std::stoi(value);
+			else if (ctrl->Type() == UIClass::UI_StatusBar)
+				((StatusBar*)ctrl)->Gap = std::stoi(value);
+		}
+		else if (propertyName == L"Padding")
+		{
+			if (ctrl->Type() == UIClass::UI_ToolBar)
+				((ToolBar*)ctrl)->Padding = std::stoi(value);
+			else if (ctrl->Type() == UIClass::UI_StatusBar)
+				((StatusBar*)ctrl)->Padding = std::stoi(value);
+		}
+		else if (propertyName == L"ItemHeight")
+		{
+			if (ctrl->Type() == UIClass::UI_ToolBar)
+				((ToolBar*)ctrl)->ItemHeight = std::stoi(value);
+		}
+		else if (propertyName == L"Min")
+		{
+			if (ctrl->Type() == UIClass::UI_Slider)
+				((Slider*)ctrl)->Min = std::stof(value);
+		}
+		else if (propertyName == L"Max")
+		{
+			if (ctrl->Type() == UIClass::UI_Slider)
+				((Slider*)ctrl)->Max = std::stof(value);
+		}
+		else if (propertyName == L"Value")
+		{
+			if (ctrl->Type() == UIClass::UI_Slider)
+				((Slider*)ctrl)->Value = std::stof(value);
+		}
+		else if (propertyName == L"Step")
+		{
+			if (ctrl->Type() == UIClass::UI_Slider)
+				((Slider*)ctrl)->Step = std::stof(value);
 		}
 	}
 	catch (...)
 	{
-		// 忽略转换错误
 	}
 
 	if (auto* p = dynamic_cast<Panel*>(ctrl->Parent))
@@ -941,17 +1409,37 @@ void PropertyGrid::UpdatePropertyFromBool(std::wstring propertyName, bool value)
 	if (!_currentControl)
 	{
 		if (!_canvas) return;
+		// 事件：写入窗体事件映射（用于保存/导出）
+		if (IsEventPropertyName(propertyName))
+		{
+			_canvas->SetDesignedFormEventEnabled(propertyName, value);
+			return;
+		}
 		if (propertyName == L"VisibleHead") _canvas->SetDesignedFormVisibleHead(value);
 		else if (propertyName == L"MinBox") _canvas->SetDesignedFormMinBox(value);
 		else if (propertyName == L"MaxBox") _canvas->SetDesignedFormMaxBox(value);
 		else if (propertyName == L"CloseBox") _canvas->SetDesignedFormCloseBox(value);
 		else if (propertyName == L"CenterTitle") _canvas->SetDesignedFormCenterTitle(value);
 		else if (propertyName == L"AllowResize") _canvas->SetDesignedFormAllowResize(value);
+		else if (propertyName == L"ShowInTaskBar") _canvas->SetDesignedFormShowInTaskBar(value);
+		else if (propertyName == L"TopMost") _canvas->SetDesignedFormTopMost(value);
+		else if (propertyName == L"Enable") _canvas->SetDesignedFormEnable(value);
+		else if (propertyName == L"Visible") _canvas->SetDesignedFormVisible(value);
 		return;
 	}
 	if (!_currentControl->ControlInstance) return;
 	auto ctrl = _currentControl->ControlInstance;
 
+
+		// 事件：仅更新设计期映射
+		if (IsEventPropertyName(propertyName))
+		{
+			if (value)
+				_currentControl->EventHandlers[propertyName] = L"1";
+			else
+				_currentControl->EventHandlers.erase(propertyName);
+			return;
+		}
 	if (propertyName == L"Enabled")
 	{
 		ctrl->Enable = value;
@@ -960,6 +1448,21 @@ void PropertyGrid::UpdatePropertyFromBool(std::wstring propertyName, bool value)
 	{
 		ctrl->Visible = value;
 	}
+	else if (propertyName == L"SnapToStep")
+	{
+		if (ctrl->Type() == UIClass::UI_Slider)
+			((Slider*)ctrl)->SnapToStep = value;
+	}
+	else if (propertyName == L"LastChildFill")
+	{
+		if (ctrl->Type() == UIClass::UI_DockPanel)
+			((DockPanel*)ctrl)->SetLastChildFill(value);
+	}
+	else if (propertyName == L"TopMost")
+	{
+		if (ctrl->Type() == UIClass::UI_StatusBar)
+			((StatusBar*)ctrl)->TopMost = value;
+	}
 	ctrl->PostRender();
 }
 
@@ -967,6 +1470,7 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 {
 	Clear();
 	_currentControl = control;
+	_scrollOffsetY = 0;
 
 	if (!control || !control->ControlInstance)
 	{
@@ -974,8 +1478,15 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 		if (_canvas)
 		{
 			_titleLabel->Text = L"属性 - 窗体";
-			int yOffset = 45;
+			int yOffset = GetContentTopLocal();
+			CreatePropertyItem(L"Name", _canvas->GetDesignedFormName(), yOffset);
 			CreatePropertyItem(L"Text", _canvas->GetDesignedFormText(), yOffset);
+			CreateColorPropertyItem(L"BackColor", _canvas->GetDesignedFormBackColor(), yOffset);
+			CreateColorPropertyItem(L"ForeColor", _canvas->GetDesignedFormForeColor(), yOffset);
+			CreateBoolPropertyItem(L"ShowInTaskBar", _canvas->GetDesignedFormShowInTaskBar(), yOffset);
+			CreateBoolPropertyItem(L"TopMost", _canvas->GetDesignedFormTopMost(), yOffset);
+			CreateBoolPropertyItem(L"Enable", _canvas->GetDesignedFormEnable(), yOffset);
+			CreateBoolPropertyItem(L"Visible", _canvas->GetDesignedFormVisible(), yOffset);
 			CreateBoolPropertyItem(L"VisibleHead", _canvas->GetDesignedFormVisibleHead(), yOffset);
 			CreatePropertyItem(L"HeadHeight", std::to_wstring(_canvas->GetDesignedFormHeadHeight()), yOffset);
 			CreateBoolPropertyItem(L"MinBox", _canvas->GetDesignedFormMinBox(), yOffset);
@@ -989,6 +1500,13 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			auto s = _canvas->GetDesignedFormSize();
 			CreatePropertyItem(L"Width", std::to_wstring(s.cx), yOffset);
 			CreatePropertyItem(L"Height", std::to_wstring(s.cy), yOffset);
+
+			// 窗体事件（设计期映射，仅用于导出代码）
+			for (const auto& ev : GetFormEventProperties())
+			{
+				bool enabled = _canvas->GetDesignedFormEventEnabled(ev);
+				CreateEventBoolPropertyItem(ev, enabled, yOffset);
+			}
 			Control::SetChildrenParentForm(this, this->ParentForm);
 			return;
 		}
@@ -999,7 +1517,7 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 	_titleLabel->Text = L"属性 - " + control->Name;
 
 	auto ctrl = control->ControlInstance;
-	int yOffset = 45;
+	int yOffset = GetContentTopLocal();
 
 	// 基本属性
 	CreatePropertyItem(L"Name", control->Name, yOffset);
@@ -1020,7 +1538,13 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 	CreateColorPropertyItem(L"ForeColor", ctrl->ForeColor, yOffset);
 	CreateColorPropertyItem(L"BolderColor", ctrl->BolderColor, yOffset);
 	CreateThicknessPropertyItem(L"Margin", ctrl->Margin, yOffset);
-	CreateThicknessPropertyItem(L"Padding", ctrl->Padding, yOffset);
+	// ToolBar/StatusBar 的 Padding 是 int（会隐藏 Control::Padding(Thickness)），这里对齐其实际语义
+	if (control->Type == UIClass::UI_ToolBar)
+		CreatePropertyItem(L"Padding", std::to_wstring(((ToolBar*)ctrl)->Padding), yOffset);
+	else if (control->Type == UIClass::UI_StatusBar)
+		CreatePropertyItem(L"Padding", std::to_wstring(((StatusBar*)ctrl)->Padding), yOffset);
+	else
+		CreateThicknessPropertyItem(L"Padding", ctrl->Padding, yOffset);
 	CreateAnchorPropertyItem(L"Anchor", ctrl->AnchorStyles, yOffset);
 	CreateEnumPropertyItem(L"HAlign", HAlignToText(ctrl->HAlign), { L"Left", L"Center", L"Right", L"Stretch" }, yOffset);
 	CreateEnumPropertyItem(L"VAlign", VAlignToText(ctrl->VAlign), { L"Top", L"Center", L"Bottom", L"Stretch" }, yOffset);
@@ -1039,6 +1563,17 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 		CreatePropertyItem(L"SelectIndex", std::to_wstring(tc->SelectIndex), yOffset);
 		CreatePropertyItem(L"TitleHeight", std::to_wstring(tc->TitleHeight), yOffset);
 		CreatePropertyItem(L"TitleWidth", std::to_wstring(tc->TitleWidth), yOffset);
+	}
+	if (control->Type == UIClass::UI_DockPanel)
+	{
+		auto* dp = (DockPanel*)ctrl;
+		CreateBoolPropertyItem(L"LastChildFill", dp->GetLastChildFill(), yOffset);
+	}
+	if (control->Type == UIClass::UI_StatusBar)
+	{
+		auto* sb = (StatusBar*)ctrl;
+		CreateBoolPropertyItem(L"TopMost", sb->TopMost, yOffset);
+		CreatePropertyItem(L"Gap", std::to_wstring(sb->Gap), yOffset);
 	}
 	if (control->Type == UIClass::UI_StackPanel)
 	{
@@ -1073,12 +1608,36 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 	{
 		auto* tb = (ToolBar*)ctrl;
 		CreatePropertyItem(L"Gap", std::to_wstring(tb->Gap), yOffset);
+		CreatePropertyItem(L"ItemHeight", std::to_wstring(tb->ItemHeight), yOffset);
+	}
+	if (control->Type == UIClass::UI_ComboBox)
+	{
+		auto* cb = (ComboBox*)ctrl;
+		CreatePropertyItem(L"SelectIndex", std::to_wstring(cb->SelectedIndex), yOffset);
+	}
+	if (control->Type == UIClass::UI_Slider)
+	{
+		auto* s = (Slider*)ctrl;
+		CreatePropertyItem(L"Min", std::to_wstring(s->Min), yOffset);
+		CreatePropertyItem(L"Max", std::to_wstring(s->Max), yOffset);
+		CreatePropertyItem(L"Value", std::to_wstring(s->Value), yOffset);
+		CreatePropertyItem(L"Step", std::to_wstring(s->Step), yOffset);
+		CreateBoolPropertyItem(L"SnapToStep", s->SnapToStep, yOffset);
+	}
+
+	// 事件（设计期映射，仅用于导出代码）
+	for (const auto& ev : GetEventPropertiesFor(control->Type))
+	{
+		bool enabled = (control->EventHandlers.find(ev) != control->EventHandlers.end());
+		CreateEventBoolPropertyItem(ev, enabled, yOffset);
 	}
 
 	// 高级编辑入口（模态窗口）
 	if (control->Type == UIClass::UI_ComboBox)
 	{
-		auto editBtn = new Button(L"编辑下拉项...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑下拉项...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto cb = dynamic_cast<ComboBox*>(_currentControl->ControlInstance);
@@ -1087,13 +1646,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			cb->PostRender();
 			};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_GridView)
 	{
-		auto editBtn = new Button(L"编辑列...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑列...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto gv = dynamic_cast<GridView*>(_currentControl->ControlInstance);
@@ -1102,13 +1664,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			gv->PostRender();
 			};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_TabControl)
 	{
-		auto editBtn = new Button(L"编辑页...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑页...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto tc = dynamic_cast<TabControl*>(_currentControl->ControlInstance);
@@ -1121,13 +1686,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			tc->PostRender();
 			};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_ToolBar)
 	{
-		auto editBtn = new Button(L"编辑按钮...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑按钮...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto tb = dynamic_cast<ToolBar*>(_currentControl->ControlInstance);
@@ -1140,13 +1708,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			tb->PostRender();
 			};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_TreeView)
 	{
-		auto editBtn = new Button(L"编辑节点...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑节点...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto tv = dynamic_cast<TreeView*>(_currentControl->ControlInstance);
@@ -1155,13 +1726,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			tv->PostRender();
 			};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_GridPanel)
 	{
-		auto editBtn = new Button(L"编辑行/列...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑行/列...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto gp = dynamic_cast<GridPanel*>(_currentControl->ControlInstance);
@@ -1170,13 +1744,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			gp->PostRender();
 			};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_Menu)
 	{
-		auto editBtn = new Button(L"编辑菜单项...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑菜单项...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto m = dynamic_cast<Menu*>(_currentControl->ControlInstance);
@@ -1185,13 +1762,16 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			m->PostRender();
 		};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 	else if (control->Type == UIClass::UI_StatusBar)
 	{
-		auto editBtn = new Button(L"编辑分段...", 10, yOffset + 8, this->Width - 20, 28);
+		auto* container = GetContentContainer();
+		int width = GetContentWidthLocal();
+		auto editBtn = new Button(L"编辑分段...", 10, yOffset + 8, width - 20, 28);
 		editBtn->OnMouseClick += [this](Control*, MouseEventArgs) {
 			if (!_currentControl || !_currentControl->ControlInstance || !this->ParentForm) return;
 			auto sb = dynamic_cast<StatusBar*>(_currentControl->ControlInstance);
@@ -1200,8 +1780,9 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 			dlg.ShowDialog(this->ParentForm->Handle);
 			sb->PostRender();
 		};
-		this->AddControl(editBtn);
+		container->AddControl(editBtn);
 		_extraControls.push_back(editBtn);
+		RegisterScrollable(editBtn);
 		yOffset += 36;
 	}
 
@@ -1211,6 +1792,14 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 
 void PropertyGrid::Clear()
 {
+	auto removeFromParent = [this](Control* c) {
+		if (!c) return;
+		if (_contentHost && c->Parent == _contentHost)
+			_contentHost->RemoveControl(c);
+		else
+			this->RemoveControl(c);
+	};
+
 	auto isDescendantOf = [](Control* root, Control* node) -> bool {
 		if (!root || !node) return false;
 		if (root == node) return true;
@@ -1239,7 +1828,7 @@ void PropertyGrid::Clear()
 	{
 		for (auto item : _items)
 		{
-			if (this->ParentForm->Selected == item->NameLabel ||
+			if ((item->NameLabel && this->ParentForm->Selected == item->NameLabel) ||
 				(item->ValueControl && (this->ParentForm->Selected == item->ValueControl || isDescendantOf(item->ValueControl, this->ParentForm->Selected))) ||
 				(item->ValueTextBox && this->ParentForm->Selected == item->ValueTextBox) ||
 				(item->ValueCheckBox && this->ParentForm->Selected == item->ValueCheckBox))
@@ -1264,12 +1853,33 @@ void PropertyGrid::Clear()
 	// 移除所有属性项（保留标题）
 	for (auto item : _items)
 	{
-		this->RemoveControl(item->NameLabel);
-		delete item->NameLabel;
+		if (item->NameLabel)
+		{
+			removeFromParent(item->NameLabel);
+			delete item->NameLabel;
+			item->NameLabel = nullptr;
+		}
 		if (item->ValueControl)
 		{
-			this->RemoveControl(item->ValueControl);
+			removeFromParent(item->ValueControl);
 			delete item->ValueControl;
+			item->ValueControl = nullptr;
+		}
+		else
+		{
+			// 兜底：某些条目可能不走 ValueControl（历史代码/异常场景）
+			if (item->ValueTextBox)
+			{
+				removeFromParent(item->ValueTextBox);
+				delete item->ValueTextBox;
+				item->ValueTextBox = nullptr;
+			}
+			if (item->ValueCheckBox)
+			{
+				removeFromParent(item->ValueCheckBox);
+				delete item->ValueCheckBox;
+				item->ValueCheckBox = nullptr;
+			}
 		}
 		delete item;
 	}
@@ -1278,8 +1888,12 @@ void PropertyGrid::Clear()
 	for (auto* c : _extraControls)
 	{
 		if (!c) continue;
-		this->RemoveControl(c);
+		removeFromParent(c);
 		delete c;
 	}
 	_extraControls.clear();
+	_scrollEntries.clear();
+	_scrollOffsetY = 0;
+	_contentHeight = 0;
+	_draggingScrollThumb = false;
 }

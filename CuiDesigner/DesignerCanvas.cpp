@@ -70,7 +70,7 @@ DesignerCanvas::DesignerCanvas(int x, int y, int width, int height)
 		if (h < 0) h = 0;
 		_clientSurface = new Panel(0, top, _designedFormSize.cx, h);
 	}
-	_clientSurface->BackColor = Colors::White;
+	_clientSurface->BackColor = _designedFormBackColor;
 	_clientSurface->Boder = 0.0f;
 	_designSurface->AddControl(_clientSurface);
 }
@@ -128,11 +128,11 @@ void DesignerCanvas::Update()
 				if (_designedFormCenterTitle)
 				{
 					// 简化：居中绘制（不做精确测量，按经验偏移）
-					d2d->DrawString(title, fx + (fw - rightPad) * 0.5f - 30.0f, textY, Colors::Black, this->Font);
+					d2d->DrawString(title, fx + (fw - rightPad) * 0.5f - 30.0f, textY, _designedFormForeColor, this->Font);
 				}
 				else
 				{
-					d2d->DrawString(title, fx + pad, textY, Colors::Black, this->Font);
+					d2d->DrawString(title, fx + pad, textY, _designedFormForeColor, this->Font);
 				}
 
 				// 右侧标题栏按钮（按 Form 的方式绘制图标）
@@ -2171,6 +2171,8 @@ void DesignerCanvas::ClearCanvas()
 	_designerControls.clear();
 	_selectedControl = nullptr;
 	_controlTypeCounters.clear();
+	_designedFormName = L"MainForm";
+	_designedFormEventHandlers.clear();
 	
 	OnControlSelected(nullptr);
 }
@@ -2790,10 +2792,17 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 		Json root;
 		root["schema"] = "cui.designer";
 		root["version"] = 1;
-		root["form"] = Json{
+		Json formObj = Json{
+			{"name", ToUtf8(_designedFormName)},
 			{"text", ToUtf8(_designedFormText)},
 			{"size", Json{{"w", _designedFormSize.cx}, {"h", _designedFormSize.cy}}},
 			{"location", Json{{"x", _designedFormLocation.x}, {"y", _designedFormLocation.y}}},
+			{"backColor", Json{{"r", _designedFormBackColor.r}, {"g", _designedFormBackColor.g}, {"b", _designedFormBackColor.b}, {"a", _designedFormBackColor.a}}},
+			{"foreColor", Json{{"r", _designedFormForeColor.r}, {"g", _designedFormForeColor.g}, {"b", _designedFormForeColor.b}, {"a", _designedFormForeColor.a}}},
+			{"showInTaskBar", _designedFormShowInTaskBar},
+			{"topMost", _designedFormTopMost},
+			{"enable", _designedFormEnable},
+			{"visible", _designedFormVisible},
 			{"visibleHead", _designedFormVisibleHead},
 			{"headHeight", _designedFormHeadHeight},
 			{"minBox", _designedFormMinBox},
@@ -2802,6 +2811,17 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 			{"centerTitle", _designedFormCenterTitle},
 			{"allowResize", _designedFormAllowResize}
 		};
+		{
+			Json ev = Json::object();
+			for (const auto& kv : _designedFormEventHandlers)
+			{
+				if (kv.first.empty()) continue;
+				if (kv.second.empty()) continue;
+				ev[ToUtf8(kv.first)] = true;
+			}
+			if (!ev.empty()) formObj["events"] = ev;
+		}
+		root["form"] = formObj;
 
 		// 防御：Name 必须唯一，否则 parent 引用会歧义，文件将无法可靠加载
 		{
@@ -3048,6 +3068,19 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 			}
 
 			if (!extra.empty()) item["extra"] = extra;
+
+			// events: { "OnMouseClick": true, ... }（兼容旧格式：string handlerName）
+			if (!dc->EventHandlers.empty())
+			{
+				Json ev = Json::object();
+				for (const auto& kv : dc->EventHandlers)
+				{
+					if (kv.first.empty()) continue;
+					// 现在只保存“是否启用”，handler 名在导出时按规则生成
+					ev[ToUtf8(kv.first)] = true;
+				}
+				if (!ev.empty()) item["events"] = ev;
+			}
 			arr.push_back(item);
 		}
 
@@ -3113,11 +3146,18 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 
 		ClearCanvas();
 		_controlTypeCounters.clear();
+		_designedFormEventHandlers.clear();
 
 		if (root.contains("form") && root["form"].is_object())
 		{
 			auto& form = root["form"];
+			_designedFormName = FromUtf8(form.value("name", std::string()));
+			if (_designedFormName.empty()) _designedFormName = L"MainForm";
 			_designedFormText = FromUtf8(form.value("text", std::string()));
+			_designedFormShowInTaskBar = form.value("showInTaskBar", _designedFormShowInTaskBar);
+			_designedFormTopMost = form.value("topMost", _designedFormTopMost);
+			_designedFormEnable = form.value("enable", _designedFormEnable);
+			_designedFormVisible = form.value("visible", _designedFormVisible);
 			_designedFormVisibleHead = form.value("visibleHead", _designedFormVisibleHead);
 			_designedFormHeadHeight = form.value("headHeight", _designedFormHeadHeight);
 			if (_designedFormHeadHeight < 0) _designedFormHeadHeight = 0;
@@ -3126,6 +3166,43 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 			_designedFormCloseBox = form.value("closeBox", _designedFormCloseBox);
 			_designedFormCenterTitle = form.value("centerTitle", _designedFormCenterTitle);
 			_designedFormAllowResize = form.value("allowResize", _designedFormAllowResize);
+			if (form.contains("backColor") && form["backColor"].is_object())
+			{
+				auto& c = form["backColor"];
+				_designedFormBackColor = D2D1::ColorF(
+					(float)c.value("r", (double)_designedFormBackColor.r),
+					(float)c.value("g", (double)_designedFormBackColor.g),
+					(float)c.value("b", (double)_designedFormBackColor.b),
+					(float)c.value("a", (double)_designedFormBackColor.a));
+			}
+			if (form.contains("foreColor") && form["foreColor"].is_object())
+			{
+				auto& c = form["foreColor"];
+				_designedFormForeColor = D2D1::ColorF(
+					(float)c.value("r", (double)_designedFormForeColor.r),
+					(float)c.value("g", (double)_designedFormForeColor.g),
+					(float)c.value("b", (double)_designedFormForeColor.b),
+					(float)c.value("a", (double)_designedFormForeColor.a));
+			}
+			if (_clientSurface) _clientSurface->BackColor = _designedFormBackColor;
+			if (form.contains("events") && form["events"].is_object())
+			{
+				for (auto it = form["events"].begin(); it != form["events"].end(); ++it)
+				{
+					std::wstring name = FromUtf8(it.key());
+					if (name.empty()) continue;
+					if (it.value().is_boolean())
+					{
+						if (it.value().get<bool>()) _designedFormEventHandlers[name] = L"1";
+					}
+					else if (it.value().is_string())
+					{
+						auto v = FromUtf8(it.value().get<std::string>());
+						if (!v.empty()) _designedFormEventHandlers[name] = v;
+						else _designedFormEventHandlers[name] = L"1";
+					}
+				}
+			}
 			if (form.contains("size") && form["size"].is_object())
 			{
 				SIZE s;
@@ -3149,6 +3226,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 			int order = -1;
 			Json props;
 			Json extra;
+			Json events;
 		};
 		std::vector<Pending> items;
 		items.reserve(root["controls"].size());
@@ -3177,6 +3255,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 			p.order = j.value("order", -1);
 			p.props = j.contains("props") ? j["props"] : Json::object();
 			p.extra = j.contains("extra") ? j["extra"] : Json::object();
+			p.events = j.contains("events") ? j["events"] : Json::object();
 			items.push_back(std::move(p));
 		}
 
@@ -3242,6 +3321,26 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 			auto dc = dcIt->second;
 			auto* c = dc->ControlInstance;
 			if (!c) continue;
+
+			if (it.events.is_object())
+			{
+				dc->EventHandlers.clear();
+				for (auto evIt = it.events.begin(); evIt != it.events.end(); ++evIt)
+				{
+					std::wstring k = FromUtf8(evIt.key());
+					if (k.empty()) continue;
+					if (evIt.value().is_boolean())
+					{
+						if (evIt.value().get<bool>())
+							dc->EventHandlers[k] = L"1";
+					}
+					else if (evIt.value().is_string())
+					{
+						std::wstring v = FromUtf8(evIt.value().get<std::string>());
+						if (!v.empty()) dc->EventHandlers[k] = v;
+					}
+				}
+			}
 
 			if (it.props.is_object())
 			{
