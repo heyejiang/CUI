@@ -95,7 +95,21 @@ void DesignerCanvas::Update()
 		DrawGrid();
 		if (_designSurface)
 		{
+			auto* oldMainMenu = this->ParentForm->MainMenu;
+			auto* oldMainStatusBar = this->ParentForm->MainStatusBar;
+
+			auto isInternalDesignedControl = [&](Control* c) -> bool {
+				if (!c || !_designSurface) return false;
+				if (c == _designSurface) return true;
+				return IsDescendantOf(_designSurface, c);
+			};
+
+			this->ParentForm->MainMenu = nullptr;
+			this->ParentForm->MainStatusBar = nullptr;
 			_designSurface->Update();
+
+			this->ParentForm->MainMenu = (oldMainMenu && !isInternalDesignedControl((Control*)oldMainMenu)) ? oldMainMenu : nullptr;
+			this->ParentForm->MainStatusBar = (oldMainStatusBar && !isInternalDesignedControl((Control*)oldMainStatusBar)) ? oldMainStatusBar : nullptr;
 		}
 
 		// 绘制“仿真窗体”边框 + 标题栏（不影响控件布局，控件都在 clientSurface 内）
@@ -1644,6 +1658,51 @@ bool DesignerCanvas::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 		// 先处理 TabControl 标题栏点击（切页）
 		if (TryHandleTabHeaderClick(mousePos))
 			return true;
+
+		// 设计器里的 Menu：需要“可交互”但也要选中。
+		// 注意：不能让 Menu 抢走 Form::Selected，否则 Delete/方向键等设计器快捷键会失效。
+		auto findDesignedMenu = [&]() -> Menu* {
+			for (auto& dc : _designerControls)
+			{
+				if (!dc || !dc->ControlInstance) continue;
+				if (dc->Type != UIClass::UI_Menu) continue;
+				return dynamic_cast<Menu*>(dc->ControlInstance);
+			}
+			return nullptr;
+		};
+		auto findDesignerByControl = [&](Control* c) -> std::shared_ptr<DesignerControl> {
+			if (!c) return nullptr;
+			for (auto it = _designerControls.rbegin(); it != _designerControls.rend(); ++it)
+			{
+				auto& dc = *it;
+				if (dc && dc->ControlInstance == c)
+					return dc;
+			}
+			return nullptr;
+		};
+
+		if (auto* menu = findDesignedMenu())
+		{
+			auto r = GetControlRectInCanvas(menu);
+			if (mousePos.x >= r.left && mousePos.x <= r.right && mousePos.y >= r.top && mousePos.y <= r.bottom)
+			{
+				auto dc = findDesignerByControl(menu);
+				if (dc)
+				{
+					ClearSelection();
+					AddToSelection(dc, true, true);
+				}
+
+				// 转发鼠标消息给 Menu 执行展开/点击等交互
+				POINT local{ mousePos.x - r.left, mousePos.y - r.top };
+				auto* oldSelected = this->ParentForm ? this->ParentForm->Selected : nullptr;
+				menu->ProcessMessage(message, wParam, lParam, local.x, local.y);
+				// 恢复：让键盘快捷键仍由画布处理
+				if (this->ParentForm) this->ParentForm->Selected = this;
+				(void)oldSelected;
+				return true;
+			}
+		}
 		
 		// 检查是否点击主选中手柄（仅单选/主选中可调整大小）
 		if (_selectedControl && _selectedControls.size() == 1)

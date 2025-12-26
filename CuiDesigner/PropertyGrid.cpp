@@ -805,17 +805,22 @@ void PropertyGrid::CreateThicknessPropertyItem(std::wstring propertyName, const 
 	int valueX = (width - 30) / 2 + 15;
 	int valueW = (width - 30) / 2;
 
-	auto panel = new Panel(valueX, yOffset, valueW, 20);
+	// 多行布局：两行（L/T 与 R/B），提升每个输入框宽度，便于输入
+	const int rowH = 20;
+	const int gapX = 6;
+	const int gapY = 4;
+	const int panelH = rowH * 2 + gapY;
+
+	auto panel = new Panel(valueX, yOffset, valueW, panelH);
 	panel->BackColor = D2D1::ColorF(0, 0);
 	panel->Boder = 0.0f;
 	panel->ParentForm = this->ParentForm;
 
-	int gap = 4;
-	int boxW = (valueW - gap * 3) / 4;
-	if (boxW < 26) boxW = 26;
+	int boxW = (valueW - gapX) / 2;
+	if (boxW < 40) boxW = 40;
 
-	auto makeBox = [&](int x, float v) {
-		auto t = new TextBox(L"", x, 0, boxW, 20);
+	auto makeBox = [&](int x, int y, float v) {
+		auto t = new TextBox(L"", x, y, boxW, rowH);
 		t->ParentForm = this->ParentForm;
 		std::wostringstream oss;
 		oss.setf(std::ios::fixed);
@@ -824,10 +829,10 @@ void PropertyGrid::CreateThicknessPropertyItem(std::wstring propertyName, const 
 		return t;
 	};
 
-	auto tbL = makeBox(0, value.Left);
-	auto tbT = makeBox(boxW + gap, value.Top);
-	auto tbR = makeBox((boxW + gap) * 2, value.Right);
-	auto tbB = makeBox((boxW + gap) * 3, value.Bottom);
+	auto tbL = makeBox(0, 0, value.Left);
+	auto tbT = makeBox(boxW + gapX, 0, value.Top);
+	auto tbR = makeBox(0, rowH + gapY, value.Right);
+	auto tbB = makeBox(boxW + gapX, rowH + gapY, value.Bottom);
 
 	auto apply = [this, propertyName, tbL, tbT, tbR, tbB](Control*, std::wstring, std::wstring) {
 		Thickness t{};
@@ -852,7 +857,7 @@ void PropertyGrid::CreateThicknessPropertyItem(std::wstring propertyName, const 
 
 	_items.push_back(new PropertyItem(propertyName, nameLabel, (Control*)panel));
 
-	yOffset += 25;
+	yOffset += panelH + 5;
 }
 
 void PropertyGrid::CreateBoolPropertyItem(std::wstring propertyName, bool value, int& yOffset)
@@ -902,25 +907,34 @@ void PropertyGrid::CreateAnchorPropertyItem(std::wstring propertyName, uint8_t a
 	int valueX = (width - 30) / 2 + 15;
 	int valueW = (width - 30) / 2;
 
+	// 方向布局：像 WinForms 一样按上/左/右/下摆放
+	const int cbSize = 20;
+	const int gap = 4;
+	const int panelH = cbSize * 3 + gap * 2;
+
 	// 使用一个容器承载 4 个方向开关
-	auto panel = new Panel(valueX, yOffset, valueW, 20);
+	auto panel = new Panel(valueX, yOffset, valueW, panelH);
 	panel->BackColor = D2D1::ColorF(0, 0);
 	panel->Boder = 0.0f;
 	panel->ParentForm = this->ParentForm;
 
-	// 紧凑布局：L/T/R/B
-	int gap = 6;
-	int cbW = (valueW - gap * 3) / 4;
-	if (cbW < 24) cbW = 24;
+	const int topY = 0;
+	const int midY = cbSize + gap;
+	const int bottomY = (cbSize + gap) * 2;
+	int centerX = (valueW - cbSize) / 2;
+	if (centerX < 0) centerX = 0;
+	const int leftX = 0;
+	int rightX = valueW - cbSize;
+	if (rightX < 0) rightX = 0;
 
-	auto cbL = new CheckBox(L"", 0, 0);
-	auto cbT = new CheckBox(L"", cbW + gap, 0);
-	auto cbR = new CheckBox(L"", (cbW + gap) * 2, 0);
-	auto cbB = new CheckBox(L"", (cbW + gap) * 3, 0);
-	cbL->Size = { cbW, 20 };
-	cbT->Size = { cbW, 20 };
-	cbR->Size = { cbW, 20 };
-	cbB->Size = { cbW, 20 };
+	auto cbT = new CheckBox(L"", centerX, topY);
+	auto cbL = new CheckBox(L"", leftX, midY);
+	auto cbR = new CheckBox(L"", rightX, midY);
+	auto cbB = new CheckBox(L"", centerX, bottomY);
+	cbL->Size = { cbSize, cbSize };
+	cbT->Size = { cbSize, cbSize };
+	cbR->Size = { cbSize, cbSize };
+	cbB->Size = { cbSize, cbSize };
 	cbL->ParentForm = this->ParentForm;
 	cbT->ParentForm = this->ParentForm;
 	cbR->ParentForm = this->ParentForm;
@@ -950,7 +964,7 @@ void PropertyGrid::CreateAnchorPropertyItem(std::wstring propertyName, uint8_t a
 	auto item = new PropertyItem(propertyName, nameLabel, (Control*)panel);
 	_items.push_back(item);
 
-	yOffset += 25;
+	yOffset += panelH + 5;
 }
 
 void PropertyGrid::CreateEnumPropertyItem(std::wstring propertyName, const std::wstring& value,
