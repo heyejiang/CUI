@@ -111,3 +111,8 @@ dkms.conf
 /CuiDesigner/Release
 /CuiDesigner/Designer/x64/Release
 /CUITest/Release
+/CUI_Legacy/CUI/x64/Debug
+/CUI_Legacy/CUI/x64/Release
+/CUI_Legacy/x64
+/CUI_Legacy/Win32/Release/CUI_Legacy
+/CUI_Legacy/Release
