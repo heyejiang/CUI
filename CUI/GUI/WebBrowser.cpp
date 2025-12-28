@@ -397,22 +397,6 @@ void WebBrowser::Update()
 
 	auto abs = this->AbsLocation;
 	auto sz = this->ActualSize();
-
-	if (!_webviewReady)
-	{
-		this->ParentForm->Render->FillRect((float)abs.x, (float)abs.y, (float)sz.cx, (float)sz.cy, this->BackColor);
-		std::wstring status = L"WebBrowser: ";
-		if (!_initialized)
-			status += L"not initialized";
-		else if (!_webviewReady)
-			status += L"initializing...";
-		else if (_navCompletedCount == 0)
-			status += L"waiting for navigation...";
-		else
-			status += L"loading...";
-
-		this->ParentForm->Render->DrawString(status, (float)abs.x + 8.0f, (float)abs.y + 6.0f, Colors::DimGrey);
-	}
 }
 
 bool WebBrowser::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof)

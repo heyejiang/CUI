@@ -218,41 +218,11 @@ void DesignerCanvas::RebuildDesignedFormSharedFont()
 	}
 	rebindFontsRecursive(_designSurface ? (Control*)_designSurface : (Control*)_clientSurface, oldShared, newShared);
 
-	// 尝试释放旧共享字体：如果仍被任何控件引用则暂存，避免二次修改时 UAF 崩溃
+	// 释放策略（设计器安全优先）：
+	// 字体对象可能被某些复合控件/缓存/延迟渲染路径引用，但不一定挂在 designSurface 子树下。
+	// 为避免“修改字号两次”触发 UAF 崩溃，这里不在重建时 delete 旧共享字体，统一留到析构释放。
 	if (oldShared)
-	{
-		bool stillUsed = false;
-		if (_designSurface)
-			stillUsed = isFontUsedRecursive(_designSurface, oldShared);
-		else if (_clientSurface)
-			stillUsed = isFontUsedRecursive(_clientSurface, oldShared);
-
-		if (stillUsed)
-			_retiredDesignedFormSharedFonts.push_back(oldShared);
-		else
-			delete oldShared;
-	}
-
-	// 顺便清理已退休的字体：若已不再被引用则释放
-	if (!_retiredDesignedFormSharedFonts.empty())
-	{
-		std::vector<::Font*> keep;
-		keep.reserve(_retiredDesignedFormSharedFonts.size());
-		for (auto* f : _retiredDesignedFormSharedFonts)
-		{
-			if (!f || f == _designedFormSharedFont)
-			{
-				if (f) keep.push_back(f);
-				continue;
-			}
-			bool used = false;
-			if (_designSurface) used = isFontUsedRecursive(_designSurface, f);
-			else if (_clientSurface) used = isFontUsedRecursive(_clientSurface, f);
-			if (used) keep.push_back(f);
-			else delete f;
-		}
-		_retiredDesignedFormSharedFonts.swap(keep);
-	}
+		_retiredDesignedFormSharedFonts.push_back(oldShared);
 }
 
 void DesignerCanvas::Update()
@@ -353,11 +323,15 @@ void DesignerCanvas::Update()
 				if (_designedFormCenterTitle)
 				{
 					// 简化：居中绘制（不做精确测量，按经验偏移）
-					d2d->DrawString(title, fx + (fw - rightPad) * 0.5f - 30.0f, textY, _designedFormForeColor, this->Font);
+					::Font* titleFont = _designedFormSharedFont ? _designedFormSharedFont : GetDefaultFontObject();
+					if (!titleFont) titleFont = this->Font;
+					d2d->DrawString(title, fx + (fw - rightPad) * 0.5f - 30.0f, textY, _designedFormForeColor, titleFont);
 				}
 				else
 				{
-					d2d->DrawString(title, fx + pad, textY, _designedFormForeColor, this->Font);
+					::Font* titleFont = _designedFormSharedFont ? _designedFormSharedFont : GetDefaultFontObject();
+					if (!titleFont) titleFont = this->Font;
+					d2d->DrawString(title, fx + pad, textY, _designedFormForeColor, titleFont);
 				}
 
 				// 右侧标题栏按钮（按 Form 的方式绘制图标）

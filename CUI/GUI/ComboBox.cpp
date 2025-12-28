@@ -70,7 +70,7 @@ void ComboBox::UpdateScrollDrag(float posY) {
 	int render_count = this->ExpandCount;
 	float _render_height = this->Height * this->ExpandCount;
 	int maxScroll = this->values.Count - render_count;
-	float fontHeight = this->Font->FontHeight;
+	float fontHeight = font->FontHeight;
 	float scrollBlockHeight = ((float)render_count / (float)this->values.Count) * (float)_render_height;
 	if (scrollBlockHeight < COMBO_MIN_SCROLL_BLOCK)scrollBlockHeight = COMBO_MIN_SCROLL_BLOCK;
 	float scrollHeight = dxHeight - scrollBlockHeight;
@@ -121,7 +121,7 @@ void ComboBox::Update()
 		{
 			drawLeft = drawTop = (this->Height - textSize.height) / 2.0f;
 		}
-		d2d->DrawString(this->Text, abslocation.x + drawLeft, abslocation.y + drawTop, this->ForeColor, this->Font);
+		d2d->DrawString(this->Text, abslocation.x + drawLeft, abslocation.y + drawTop, this->ForeColor, font);
 		// 右侧展开符号：使用图形绘制，避免随 Font 改变，并在展开/收起时显示不同图案
 		{
 			const float h = (float)this->Height;
@@ -165,7 +165,7 @@ void ComboBox::Update()
 						this->values[i],
 						abslocation.x + drawLeft,
 						abslocation.y + drawTop + (((i - this->ExpandScroll) + 1) * this->Height),
-						UnderMouseForeColor, this->Font);
+						UnderMouseForeColor, font);
 				}
 				else
 				{
@@ -173,7 +173,7 @@ void ComboBox::Update()
 						this->values[i],
 						abslocation.x + drawLeft,
 						abslocation.y + drawTop + (((i - this->ExpandScroll) + 1) * this->Height),
-						this->ForeColor, this->Font);
+						this->ForeColor, font);
 				}
 			}
 			this->DrawScroll();

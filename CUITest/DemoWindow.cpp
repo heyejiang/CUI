@@ -270,9 +270,9 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
 
 	statusbar1 = this->AddControl(new StatusBar(0, this->Size.cy - this->HeadHeight - 26, this->Size.cx, 26));
 	statusbar1->AddPart(L"0 part", -1);
-	statusbar1->AddPart(L"1 part/140", 140);
-	statusbar1->AddPart(L"2 part/70", 100);
-	statusbar1->AddPart(L"3 part/240", 240);
+	statusbar1->AddPart(L"1 part/120", 120);
+	statusbar1->AddPart(L"2 part/100", 100);
+	statusbar1->AddPart(L"3 part/80", 80);
 
 	tbNew->OnMouseClick += [&](class Control* s, MouseEventArgs e) { (void)s; (void)e; this->label1->Text = L"ToolBar: I'm"; this->label1->PostRender(); this->statusbar1->SetPartText(0, L"ToolBar: I'm"); this->statusbar1->PostRender(); };
 	tbSave->OnMouseClick += [&](class Control* s, MouseEventArgs e) { (void)s; (void)e; this->label1->Text = L"ToolBar: a"; this->label1->PostRender(); this->statusbar1->SetPartText(0, L"ToolBar: a"); this->statusbar1->PostRender(); };

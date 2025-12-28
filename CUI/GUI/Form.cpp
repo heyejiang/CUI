@@ -738,6 +738,42 @@ SET_CPP(Form, std::wstring, Text) {
 	_text = value;
 	this->ControlChanged = true;
 }
+
+class Font* Form::GetFont()
+{
+	if (this->_font)
+		return this->_font;
+	return GetDefaultFontObject();
+}
+
+void Form::SetFont(class Font* value)
+{
+	this->SetFontEx(value, true);
+}
+
+void Form::SetFontEx(class Font* value, bool takeOwnership)
+{
+	if (value == GetDefaultFontObject())
+	{
+		value = nullptr;
+		takeOwnership = false;
+	}
+
+	if (value == this->_font)
+	{
+		this->_ownsFont = takeOwnership;
+		return;
+	}
+
+	if (this->_font && this->_ownsFont)
+	{
+		delete this->_font;
+	}
+	this->_font = value;
+	this->_ownsFont = takeOwnership;
+	this->ControlChanged = true;
+	this->Invalidate(false);
+}
 GET_CPP(Form, bool, TopMost)
 {
 	return (GetWindowLong(this->Handle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
@@ -952,6 +988,13 @@ void Form::CleanupResources()
 		this->Image->Release();
 		this->Image = nullptr;
 	}
+
+	if (this->_font && this->_ownsFont)
+	{
+		delete this->_font;
+	}
+	this->_font = nullptr;
+	this->_ownsFont = false;
 
 	if (OverlayRender)
 	{
@@ -1324,14 +1367,14 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 		if (RectIntersects(drawRc, headRc))
 		{
 			this->Render->FillRect(0, 0, this->Size.cx, this->HeadHeight, this->HeadBackColor);
-			auto defaultFont = GetDefaultFontObject();
-			float headTextTop = (this->HeadHeight - defaultFont->FontHeight) * 0.5f;
+			auto font = this->GetFont();
+			float headTextTop = (this->HeadHeight - font->FontHeight) * 0.5f;
 			if (headTextTop < 0.0f)
 				headTextTop = 0.0f;
 			this->Render->PushDrawRect(0, 0, this->Size.cx, this->HeadHeight);
 			if (this->CenterTitle)
 			{
-				auto tSize = defaultFont->GetTextSize(this->Text);
+				auto tSize = font->GetTextSize(this->Text);
 				float textRangeWidth = this->Size.cx;
 				int buttonCount = 0;
 				if (this->MinBox) buttonCount++;
@@ -1341,11 +1384,11 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 				float headTextLeft = (textRangeWidth - tSize.width) * 0.5f;
 				if (headTextLeft < 0.0f)
 					headTextLeft = 0.0f;
-				this->Render->DrawString(this->Text, headTextLeft, headTextTop, this->ForeColor);
+				this->Render->DrawString(this->Text, headTextLeft, headTextTop, this->ForeColor, font);
 			}
 			else
 			{
-				this->Render->DrawString(this->Text, 5.0f, headTextTop, this->ForeColor);
+				this->Render->DrawString(this->Text, 5.0f, headTextTop, this->ForeColor, font);
 			}
 
 			auto drawBtn = [&](CaptionButtonKind kind, CaptionButtonState st, D2D1_COLOR_F hover, D2D1_COLOR_F pressed)

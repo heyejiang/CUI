@@ -1,8 +1,9 @@
 ﻿#include "DemoWindow.h"
+#include "DemoWindow1.h"
 #pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
 int main()
 {
-	DemoWindow fm;
+	DemoWindow1 fm;
 	fm.Show();
 	auto notify = TestNotifyIcon(fm.Handle);
 	notify->ShowNotifyIcon();

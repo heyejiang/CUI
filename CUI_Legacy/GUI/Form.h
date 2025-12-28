@@ -50,6 +50,8 @@ private:
 	POINT _Location_INIT;
 	SIZE _Size_INTI;
 	std::wstring _text;
+	Font* _font = NULL;
+	bool _ownsFont = false;
 	bool _allowResize = true;
 	bool _maxBoxBeforeAllowResize = true;
 	enum class CaptionButtonKind : uint8_t { Minimize, Maximize, Close };
@@ -171,6 +173,10 @@ public:
 	PROPERTY(std::wstring, Text);
 	GET(std::wstring, Text);
 	SET(std::wstring, Text);
+	class Font* GetFont();
+	void SetFont(class Font* value);
+	// 显式设置是否由 Form 释放 Font（默认：通过属性 Font 设置时视为“拥有”）
+	void SetFontEx(class Font* value, bool takeOwnership);
 	PROPERTY(bool, TopMost);
 	GET(bool, TopMost);
 	SET(bool, TopMost);
