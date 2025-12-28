@@ -54,6 +54,12 @@
     <ClCompile Include="TreeViewNodesEditorDialog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="MenuItemsEditorDialog.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="StatusBarPartsEditorDialog.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CodeGenerator.h">
@@ -90,6 +96,12 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="TreeViewNodesEditorDialog.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuItemsEditorDialog.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="StatusBarPartsEditorDialog.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

@@ -1060,17 +1060,6 @@ void Form::PerformLayout()
 			}
 			else
 			{
-				if (hAlign == HorizontalAlignment::Left && margin.Right != 0.0f)
-				{
-					w = availableW - (float)loc.x;
-					if (w < 0) w = 0;
-				}
-				if (vAlign == VerticalAlignment::Top && margin.Bottom != 0.0f)
-				{
-					h = availableH - (float)loc.y;
-					if (h < 0) h = 0;
-				}
-
 				if (hAlign == HorizontalAlignment::Stretch)
 				{
 					x = margin.Left;

@@ -1450,6 +1450,11 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 		p->InvalidateLayout();
 		p->PerformLayout();
 	}
+	if (auto* p = dynamic_cast<Panel*>(ctrl))
+	{
+		p->InvalidateLayout();
+		p->PerformLayout();
+	}
 	if (_canvas) _canvas->ClampControlToDesignSurface(ctrl);
 	ctrl->PostRender();
 }
@@ -1474,6 +1479,11 @@ void PropertyGrid::UpdatePropertyFromFloat(std::wstring propertyName, float valu
 	catch (...) {}
 
 	if (auto* p = dynamic_cast<Panel*>(ctrl->Parent))
+	{
+		p->InvalidateLayout();
+		p->PerformLayout();
+	}
+	if (auto* p = dynamic_cast<Panel*>(ctrl))
 	{
 		p->InvalidateLayout();
 		p->PerformLayout();
@@ -1537,16 +1547,15 @@ void PropertyGrid::UpdatePropertyFromBool(std::wstring propertyName, bool value)
 	if (!_currentControl->ControlInstance) return;
 	auto ctrl = _currentControl->ControlInstance;
 
-
-		// 事件：仅更新设计期映射
-		if (IsEventPropertyName(propertyName))
-		{
-			if (value)
-				_currentControl->EventHandlers[propertyName] = L"1";
-			else
-				_currentControl->EventHandlers.erase(propertyName);
-			return;
-		}
+	// 事件：仅更新设计期映射
+	if (IsEventPropertyName(propertyName))
+	{
+		if (value)
+			_currentControl->EventHandlers[propertyName] = L"1";
+		else
+			_currentControl->EventHandlers.erase(propertyName);
+		return;
+	}
 	if (propertyName == L"Enabled")
 	{
 		ctrl->Enable = value;
@@ -1570,6 +1579,18 @@ void PropertyGrid::UpdatePropertyFromBool(std::wstring propertyName, bool value)
 		if (ctrl->Type() == UIClass::UI_StatusBar)
 			((StatusBar*)ctrl)->TopMost = value;
 	}
+
+	if (auto* p = dynamic_cast<Panel*>(ctrl->Parent))
+	{
+		p->InvalidateLayout();
+		p->PerformLayout();
+	}
+	if (auto* p = dynamic_cast<Panel*>(ctrl))
+	{
+		p->InvalidateLayout();
+		p->PerformLayout();
+	}
+	if (_canvas) _canvas->ClampControlToDesignSurface(ctrl);
 	ctrl->PostRender();
 }
 

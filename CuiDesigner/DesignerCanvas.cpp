@@ -260,6 +260,41 @@ void DesignerCanvas::Update()
 	if (this->IsVisual == false) return;
 	if (!this->ParentForm) return;
 
+	// TabControl 切页会隐藏旧 TabPage：若当前选中控件变为不可见，需要清除选中，避免残留选框。
+	auto isEffectivelyVisible = [&](Control* c) -> bool {
+		while (c && c != this)
+		{
+			if (!c->Visible) return false;
+			c = c->Parent;
+		}
+		return true;
+	};
+	bool selectionChangedByVisibility = false;
+	if (!_selectedControls.empty())
+	{
+		auto it = std::remove_if(_selectedControls.begin(), _selectedControls.end(),
+			[&](const std::shared_ptr<DesignerControl>& dc) {
+				if (!dc || !dc->ControlInstance) return true;
+				if (!isEffectivelyVisible(dc->ControlInstance))
+				{
+					dc->IsSelected = false;
+					selectionChangedByVisibility = true;
+					return true;
+				}
+				return false;
+			});
+		_selectedControls.erase(it, _selectedControls.end());
+		if (_selectedControl && !IsSelected(_selectedControl))
+		{
+			_selectedControl = _selectedControls.empty() ? nullptr : _selectedControls.back();
+			selectionChangedByVisibility = true;
+		}
+		if (selectionChangedByVisibility)
+		{
+			OnControlSelected(_selectedControl);
+		}
+	}
+
 	auto d2d = this->ParentForm->Render;
 	auto abslocation = this->AbsLocation;
 	auto size = this->ActualSize();
@@ -601,6 +636,10 @@ void DesignerCanvas::LiftSelectedToRootForDrag()
 	if (parent == _clientSurface) return;
 	if (!IsLayoutContainer(parent)) return;
 
+	const auto parentType = parent->Type();
+	const bool fromGrid = (parentType == UIClass::UI_GridPanel);
+	const bool fromRelative = (parentType == UIClass::UI_RelativePanel);
+
 	// 抬升前先拿到当前视觉矩形，保持“画面不跳”
 	RECT r = GetControlRectInCanvas(moving);
 	POINT newLocal = CanvasToContainerPoint({ r.left, r.top }, _clientSurface);
@@ -614,6 +653,22 @@ void DesignerCanvas::LiftSelectedToRootForDrag()
 	_clientSurface->AddControl(moving);
 	moving->Location = newLocal;
 	moving->Size = { w, h };
+	// 从 GridPanel 抬升到根：避免默认 Stretch 直接把控件“铺满”
+	if (fromGrid)
+	{
+		moving->HAlign = HorizontalAlignment::Left;
+		moving->VAlign = VerticalAlignment::Top;
+	}
+	// 从 RelativePanel 抬升到根：清掉用作定位的 Margin，回到 Location 语义
+	if (fromRelative)
+	{
+		auto m = moving->Margin;
+		m.Left = 0.0f;
+		m.Top = 0.0f;
+		m.Right = 0.0f;
+		m.Bottom = 0.0f;
+		moving->Margin = m;
+	}
 	_selectedControl->DesignerParent = nullptr;
 	_dragLiftedToRoot = true;
 
@@ -1156,6 +1211,7 @@ bool DesignerCanvas::TryHandleTabHeaderClick(POINT ptCanvas)
 	if (idx < 0) idx = 0;
 	if (idx >= bestTc->Count) idx = bestTc->Count - 1;
 
+	int oldIdx = bestTc->SelectIndex;
 	bestTc->SelectIndex = idx;
 	for (int i = 0; i < bestTc->Count; i++)
 	{
@@ -1177,13 +1233,10 @@ bool DesignerCanvas::TryHandleTabHeaderClick(POINT ptCanvas)
 	}
 	bestTc->PostRender();
 
-	if (_selectedControl != bestDc)
-	{
-		if (_selectedControl) _selectedControl->IsSelected = false;
-		_selectedControl = bestDc;
-		_selectedControl->IsSelected = true;
-		OnControlSelected(_selectedControl);
-	}
+	// 切页后：清除之前页上选中的控件，避免选框残留；并把 TabControl 设为当前选中。
+	// 即使 idx 未变化，点击标题栏也视为在操作 TabControl。
+	ClearSelection();
+	AddToSelection(bestDc, true, true);
 	return true;
 }
 
@@ -1315,6 +1368,18 @@ std::shared_ptr<DesignerControl> DesignerCanvas::HitTestControl(POINT pt)
 		}
 		return nullptr;
 	};
+
+	// Alt 点击：优先选择父容器（解决“子控件铺满后容器难选中”）
+	if (GetAsyncKeyState(VK_MENU) & 0x8000)
+	{
+		Control* p = hit->Parent;
+		while (p && p != this)
+		{
+			auto dc = findDesigner(p);
+			if (dc) return dc;
+			p = p->Parent;
+		}
+	}
 
 	return findDesigner(hit);
 }
@@ -1686,6 +1751,8 @@ void DesignerCanvas::TryReparentSelectedAfterDrag()
 		auto m = moving->Margin;
 		m.Left = (float)newLocal.x;
 		m.Top = (float)newLocal.y;
+		m.Right = 0.0f;
+		m.Bottom = 0.0f;
 		moving->Margin = m;
 		moving->Location = { 0,0 };
 	}

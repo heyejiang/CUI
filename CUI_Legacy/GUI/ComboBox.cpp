@@ -149,7 +149,7 @@ void ComboBox::Update()
 				tri.point2 = D2D1::Point2F(cx + half, cy - triH * 0.5f);
 				tri.point3 = D2D1::Point2F(cx, cy + triH * 0.5f);
 			}
-			d2d->DrawTriangle(tri, this->ForeColor);
+			d2d->FillTriangle(tri, this->ForeColor);
 		}
 		if (this->Expand)
 		{

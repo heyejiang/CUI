@@ -307,7 +307,7 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
 	radiobox1->OnChecked += std::bind_front(&DemoWindow::radiobox1_OnChecked, this);
 	radiobox2->OnChecked += std::bind_front(&DemoWindow::radiobox2_OnChecked, this);
 
-	textbox2 = this->AddControl(new RichTextBox(L"RichTextBox", 260, button1->Top, 800, 160));
+	textbox2 = this->AddControl(new RichTextBox(L"RichTextBox", 260, button1->Top, 800, 155));
 	textbox2->BackColor = D2D1_COLOR_F{ 1,1,1,0.25f };
 	textbox2->FocusedColor = D2D1_COLOR_F{ 1,1,1,0.5f };
 	textbox2->AllowMultiLine = true;

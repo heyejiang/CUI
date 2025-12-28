@@ -136,18 +136,6 @@ void Panel::PerformLayout()
 			}
 			else
 			{
-				// 兼容增强：普通容器下，仅设置 Right/Bottom Margin 时，也视为对右/下边界的约束
-				if (hAlign == HorizontalAlignment::Left && margin.Right != 0.0f)
-				{
-					w = availableW - (float)loc.x;
-					if (w < 0) w = 0;
-				}
-				if (vAlign == VerticalAlignment::Top && margin.Bottom != 0.0f)
-				{
-					h = availableH - (float)loc.y;
-					if (h < 0) h = 0;
-				}
-
 				// 未设置 Anchor 时，使用对齐属性（Left/Top 为兼容模式：保留 Location 语义）
 				if (hAlign == HorizontalAlignment::Stretch)
 				{
