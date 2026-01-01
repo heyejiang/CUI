@@ -104,7 +104,11 @@ GridView::ScrollLayout GridView::CalcScrollLayout()
 		if (l.RowHeight > 0.0f && contentH > 0.0f)
 			visibleRows = (int)std::ceil(contentH / l.RowHeight) + 1;
 		if (visibleRows < 0) visibleRows = 0;
-		const float totalRowsH = (l.RowHeight > 0.0f) ? (l.RowHeight * (float)this->Rows.Count) : 0.0f;
+		
+		// 计算新行区域高度（如果有的话）
+		float newRowAreaHeight = (this->AllowUserToAddRows && this->Columns.Count > 0) ? l.RowHeight : 0.0f;
+		float totalRowsH = (l.RowHeight > 0.0f) ? (l.RowHeight * (float)this->Rows.Count) : 0.0f;
+		totalRowsH += newRowAreaHeight;  // 加上新行区域高度
 
 		bool newNeedV = (totalRowsH > contentH);
 		bool newNeedH = (l.TotalColumnsWidth > renderW);
@@ -134,7 +138,11 @@ GridView::ScrollLayout GridView::CalcScrollLayout()
 	float contentH = l.RenderHeight - l.HeadHeight;
 	if (contentH < 0.0f) contentH = 0.0f;
 	l.ContentHeight = contentH;
+	
+	// 计算新行区域高度
+	float newRowAreaHeight = (this->AllowUserToAddRows && this->Columns.Count > 0) ? l.RowHeight : 0.0f;
 	l.TotalRowsHeight = (l.RowHeight > 0.0f) ? (l.RowHeight * (float)this->Rows.Count) : 0.0f;
+	l.TotalRowsHeight += newRowAreaHeight;  // 加上新行区域高度
 	l.MaxScrollY = std::max(0.0f, l.TotalRowsHeight - contentH);
 	l.VisibleRows = (l.RowHeight > 0.0f && contentH > 0.0f) ? ((int)std::ceil(contentH / l.RowHeight) + 1) : 0;
 	if (l.VisibleRows < 0) l.VisibleRows = 0;
@@ -181,6 +189,16 @@ CursorKind GridView::QueryCursor(int xof, int yof)
 			{
 				return CursorKind::IBeam;
 			}
+		}
+	}
+
+	// 检查是否在新行区域
+	if (this->AllowUserToAddRows)
+	{
+		int newRowCol = -1;
+		if (HitTestNewRow(xof, yof, newRowCol) >= 0 && newRowCol >= 0)
+		{
+			return CursorKind::IBeam;  // 在新行区域显示IBeam光标表示可以编辑
 		}
 	}
 
@@ -793,7 +811,7 @@ void GridView::Update()
 							break;
 							case ColumnType::Button:
 							{
-								// Button：独立样式（WinForms-like），不使用普通单元格的“选中底色”
+								// Button：独立样式（WinForms-like），不使用普通单元格的"选中底色"
 								const bool isHot = (c == this->UnderMouseColumnIndex && r == this->UnderMouseRowIndex);
 								const bool isPressed = (this->_buttonMouseDown && isHot &&
 									this->_buttonDownColumnIndex == c && this->_buttonDownRowIndex == r &&
@@ -817,15 +835,17 @@ void GridView::Update()
 								}
 
 								// Text center (+ pressed offset)
-								if (row.Cells.Count > c)
+								// 使用列的ButtonText作为按钮文字
+								const std::wstring& buttonText = this->Columns[c].ButtonText;
+								if (!buttonText.empty())
 								{
-									auto textSize = font->GetTextSize(row.Cells[c].Text);
+									auto textSize = font->GetTextSize(buttonText);
 									float tx = (c_width - textSize.width) * 0.5f;
 									float ty = (_r_height - textSize.height) * 0.5f;
 									if (tx < 0.0f) tx = 0.0f;
 									if (ty < 0.0f) ty = 0.0f;
 									if (isPressed) { tx += 1.0f; ty += 1.0f; }
-									d2d->DrawString(row.Cells[c].Text,
+									d2d->DrawString(buttonText,
 										abslocation.x + drawX + tx,
 										abslocation.y + yf + ty,
 										this->ForeColor, font);
@@ -984,6 +1004,76 @@ void GridView::Update()
 				}
 				yf += row_height;
 			}
+			
+			// 渲染新行区域（如果启用）
+			if (this->AllowUserToAddRows && this->Columns.Count > 0)
+			{
+				float newRowY = yf;
+				if (newRowY < head_height) newRowY = head_height;
+				
+				// 确保新行在可视区域内
+				if (newRowY < _render_height)
+				{
+					float newRowHeight = row_height;
+					if (newRowY + newRowHeight > _render_height)
+						newRowHeight = _render_height - newRowY;
+					
+					if (newRowHeight > 0.0f)
+					{
+						float xf = -this->ScrollXOffset;
+						for (int c = 0; c < this->Columns.Count; c++)
+						{
+							float colW = this->Columns[c].Width;
+							if (xf >= _render_width) break;
+							if (xf + colW <= 0.0f) { xf += colW; continue; }
+
+							float drawX = xf;
+							float c_width = colW;
+							if (drawX < 0.0f) { c_width += drawX; drawX = 0.0f; }
+							if (drawX + c_width > _render_width) c_width = _render_width - drawX;
+							if (c_width <= 0.0f) { xf += colW; continue; }
+
+							const float clipX = drawX;
+							const float clipW = c_width;
+
+							d2d->PushDrawRect(abslocation.x + clipX, abslocation.y + newRowY, clipW, newRowHeight);
+							{
+								// 绘制新行背景
+								d2d->FillRect(abslocation.x + drawX, abslocation.y + newRowY, c_width, newRowHeight, this->NewRowBackColor);
+								
+								// 绘制新行单元格内容（空单元格样式）
+								if (c == 0)
+								{
+									// 在第一列显示新行指示符 (*)
+									float asteriskSize = font_height * 0.5f;
+									float asteriskX = abslocation.x + drawX + text_top;
+									float asteriskY = abslocation.y + newRowY + text_top;
+									
+									// 绘制星号
+									d2d->DrawString(L"*",
+										asteriskX,
+										asteriskY,
+										this->NewRowIndicatorColor, font);
+									
+									// 绘制提示文字
+									std::wstring hintText = L"点击添加新行";
+									auto hintSize = font->GetTextSize(hintText);
+									d2d->DrawString(hintText,
+										asteriskX + asteriskSize + 4.0f,
+										asteriskY,
+										this->NewRowForeColor, font);
+								}
+								
+								// 绘制单元格边框
+								d2d->DrawRect(abslocation.x + drawX, abslocation.y + newRowY, c_width, newRowHeight, this->NewRowForeColor, 1.0f);
+							}
+							d2d->PopDrawRect();
+							xf += colW;
+						}
+					}
+				}
+			}
+			
 			d2d->PushDrawRect(
 				(float)abslocation.x,
 				(float)abslocation.y,
@@ -1010,6 +1100,106 @@ void GridView::Update()
 	}
 	d2d->PopDrawRect();
 }
+
+bool GridView::IsNewRowArea(int x, int y)
+{
+	if (!this->AllowUserToAddRows) return false;
+	if (this->Columns.Count <= 0) return false;
+
+	auto l = this->CalcScrollLayout();
+	const float headHeight = l.HeadHeight;
+	const float renderWidth = l.RenderWidth;
+	const float renderHeight = l.RenderHeight;
+
+	// 检查是否在渲染区域内
+	if (x < 0 || x >= (int)renderWidth) return false;
+	if (y < 0 || y >= (int)renderHeight) return false;
+
+	// 检查是否在表头下方
+	if (y <= (int)headHeight) return false;
+
+	// 计算新行区域的位置
+	const float rowHeight = this->GetRowHeightPx();
+	const float totalRowsHeight = rowHeight * (float)this->Rows.Count;
+	const float newRowY = headHeight + totalRowsHeight;
+
+	// 检查鼠标是否在新行区域内
+	const float virtualY = ((float)y - headHeight) + this->ScrollYOffset;
+	if (virtualY >= totalRowsHeight && virtualY < totalRowsHeight + rowHeight)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+int GridView::HitTestNewRow(int x, int y, int& outColumnIndex)
+{
+	if (!this->AllowUserToAddRows) return -1;
+	if (this->Columns.Count <= 0) return -1;
+
+	auto l = this->CalcScrollLayout();
+	const float headHeight = l.HeadHeight;
+	const float renderWidth = l.RenderWidth;
+
+	if (x < 0 || x >= (int)renderWidth) return -1;
+	if (y <= (int)headHeight) return -1;
+
+	const float rowHeight = this->GetRowHeightPx();
+	const float totalRowsHeight = rowHeight * (float)this->Rows.Count;
+	const float virtualY = ((float)y - headHeight) + this->ScrollYOffset;
+
+	// 检查是否在新行区域内
+	if (virtualY < totalRowsHeight || virtualY >= totalRowsHeight + rowHeight)
+		return -1;
+
+	// 确定鼠标在哪一列
+	const float virtualX = (float)x + this->ScrollXOffset;
+	float acc = 0.0f;
+	for (int i = 0; i < this->Columns.Count; i++)
+	{
+		if (virtualX >= acc && virtualX < acc + this->Columns[i].Width)
+		{
+			outColumnIndex = i;
+			return this->Rows.Count;  // 返回Rows.Count作为新行的索引
+		}
+		acc += this->Columns[i].Width;
+	}
+
+	return -1;
+}
+
+void GridView::AddNewRow()
+{
+	if (!this->AllowUserToAddRows) return;
+
+	// 创建新行
+	GridViewRow newRow;
+	for (int i = 0; i < this->Columns.Count; i++)
+	{
+		CellValue cell;
+		newRow.Cells.Add(cell);
+	}
+	
+	// 添加到Rows列表
+	int newRowIndex = this->Rows.Count;
+	this->Rows.Add(newRow);
+
+	// 触发新行添加事件
+	this->OnUserAddedRow(this, newRowIndex);
+
+	// 自动选中新行的第一列并开始编辑
+	if (this->Columns.Count > 0)
+	{
+		this->SelectedColumnIndex = 0;
+		this->SelectedRowIndex = newRowIndex;
+		this->SelectionChanged(this);
+		StartEditingCell(0, newRowIndex);
+	}
+
+	this->PostRender();
+}
+
 void GridView::ReSizeRows(int count)
 {
 	if (count < 0) count = 0;
@@ -1037,7 +1227,17 @@ void GridView::AutoSizeColumn(int col)
 					this->Columns[col].Type == ColumnType::Button ||
 					this->Columns[col].Type == ColumnType::ComboBox)
 				{
-					auto width = font->GetTextSize(r.Cells[col].Text.c_str()).width;
+					// Button列使用列的ButtonText来计算宽度
+					std::wstring textToMeasure;
+					if (this->Columns[col].Type == ColumnType::Button && !this->Columns[col].ButtonText.empty())
+					{
+						textToMeasure = this->Columns[col].ButtonText;
+					}
+					else
+					{
+						textToMeasure = r.Cells[col].Text;
+					}
+					auto width = font->GetTextSize(textToMeasure.c_str()).width;
 					if (column.Width < width)
 					{
 						column.Width = width;
@@ -1446,6 +1646,20 @@ void GridView::HandleMouseMove(int xof, int yof)
 		}
 		this->UnderMouseColumnIndex = undermouseIndex.x;
 		this->UnderMouseRowIndex = undermouseIndex.y;
+
+		// 检查是否在新行区域
+		if (this->AllowUserToAddRows)
+		{
+			int newRowCol = -1;
+			int hitResult = HitTestNewRow(xof, yof, newRowCol);
+			bool isUnderNewRow = (hitResult >= 0 && newRowCol >= 0);
+			if (this->_isUnderNewRow != isUnderNewRow)
+			{
+				this->_isUnderNewRow = isUnderNewRow;
+				this->_newRowAreaHitTest = newRowCol;
+				needUpdate = true;
+			}
+		}
 	}
 
 	MouseEventArgs event_obj(MouseButtons::None, 0, xof, yof, 0);
@@ -1614,6 +1828,19 @@ void GridView::HandleLeftButtonDown(int xof, int yof)
 		else
 		{
 			CancelEditing(false);
+		}
+
+		// 处理新行点击
+		if (this->AllowUserToAddRows && undermouseIndex.y < 0 && undermouseIndex.x >= 0)
+		{
+			int newRowCol = -1;
+			int hitResult = HitTestNewRow(xof, yof, newRowCol);
+			if (hitResult >= 0 && newRowCol >= 0 && newRowCol < this->Columns.Count)
+			{
+				CancelEditing(true);
+				AddNewRow();
+				return;
+			}
 		}
 	}
 

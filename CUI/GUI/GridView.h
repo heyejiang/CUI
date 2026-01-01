@@ -5,6 +5,7 @@
 typedef Event<void(class GridView*, int c, int r, bool v) > OnGridViewCheckStateChangedEvent;
 typedef Event<void(class GridView*, int c, int r)> OnGridViewButtonClickEvent;
 typedef Event<void(class GridView*, int c, int r, int selectedIndex, std::wstring selectedText)> OnGridViewComboBoxSelectionChangedEvent;
+typedef Event<void(class GridView*, int newRowIndex)> OnGridViewUserAddedRowEvent;
 enum class ColumnType
 {
 	Text,
@@ -24,6 +25,8 @@ public:
 	bool CanEdit = true;
 	// ComboBox 列：下拉选项列表（当 Count>0 时默认选中第 0 项）
 	List<std::wstring> ComboBoxItems = List<std::wstring>();
+	// Button 列：按钮文字
+	std::wstring ButtonText = L"";
 	std::function<int(const CellValue& lhs, const CellValue& rhs)> SortFunc = nullptr;
 	GridViewColumn(std::wstring name = L"", float width = 120.0F, ColumnType type = ColumnType::Text, bool canEdit = false);
 	void SetSortFunc(std::function<int(const CellValue& lhs, const CellValue& rhs)> func)
@@ -100,9 +103,17 @@ public:
 	D2D1_COLOR_F EditSelectedBackColor = { 0.f , 0.f , 1.f , 0.5f };
 	D2D1_COLOR_F EditSelectedForeColor = Colors::White;
 	float EditTextMargin = 3.0f;
+	
+	// 新行相关属性
+	bool AllowUserToAddRows = false;           // 是否允许用户手动添加新行
+	bool AllowUserToDeleteRows = true;         // 是否允许用户删除行
+	D2D1_COLOR_F NewRowBackColor = { 0.95f, 0.95f, 0.95f, 1.0f };  // 新行背景色
+	D2D1_COLOR_F NewRowForeColor = Colors::gray81;                     // 新行文字颜色
+	D2D1_COLOR_F NewRowIndicatorColor = Colors::RoyalBlue;           // 新行指示符颜色
 	OnGridViewCheckStateChangedEvent OnGridViewCheckStateChanged;
 	OnGridViewButtonClickEvent OnGridViewButtonClick;
 	OnGridViewComboBoxSelectionChangedEvent OnGridViewComboBoxSelectionChanged;
+	OnGridViewUserAddedRowEvent OnUserAddedRow;
 	SelectionChangedEvent SelectionChanged;
 	float ScrollXOffset = 0.0f;
 	GridViewRow& SelectedRow();
@@ -185,6 +196,10 @@ private:
 	int _buttonDownColumnIndex = -1;
 	int _buttonDownRowIndex = -1;
 
+	// 新行相关成员变量
+	bool _isUnderNewRow = false;   // 鼠标是否在新行区域
+	int _newRowAreaHitTest = -1;   // 新行区域的列索引 (-1表示不在新行区域)
+
 	float GetRowHeightPx();
 	float GetHeadHeightPx();
 	bool TryGetCellRectLocal(int col, int row, D2D1_RECT_F& outRect);
@@ -197,6 +212,12 @@ private:
 	std::wstring EditGetSelectedString();
 	void EditEnsureSelectionInRange();
 	void EditSetImeCompositionWindow();
+
+	// 新行相关方法
+	bool IsNewRowArea(int x, int y);
+	int HitTestNewRow(int x, int y, int& outColumnIndex);
+	void DrawNewRowIndicator();
+	void AddNewRow();
 public:
 	void Update() override;
 	void AutoSizeColumn(int col);

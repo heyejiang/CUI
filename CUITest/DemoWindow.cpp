@@ -368,6 +368,7 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
 	gridview1->Font = new Font(L"Arial", 16);
 	gridview1->Margin = Thickness(10, 32, 10, 10);
 	gridview1->AnchorStyles = AnchorStyles::Left | AnchorStyles::Top | AnchorStyles::Right | AnchorStyles::Bottom;
+	gridview1->AllowUserToAddRows = false;
 
 	gridview1->Columns.Add(GridViewColumn(L"Image", 80, ColumnType::Image));
 
@@ -391,6 +392,7 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
 	gridview1->Columns.Add(textColumn);
 
 	GridViewColumn buttonColumn = GridViewColumn(L"Button", 80, ColumnType::Button);
+	buttonColumn.ButtonText = L"OK";
 	gridview1->Columns.Add(buttonColumn);
 
 
@@ -403,7 +405,7 @@ DemoWindow::DemoWindow() : Form(L"", { 0,0 }, { 1280,640 })
 			bmps[i % 10] ,
 			i % 2 == 0,
 			std::to_wstring(Random::Next()) ,
-			L"确定",
+			L"",
 			i % 3 == 0 ,
 			std::to_wstring(Random::Next())
 		};

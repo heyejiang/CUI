@@ -97,7 +97,7 @@ GET_CPP(Control, class Font*, Font)
 	if (this->_font)
 		return this->_font;
 	if (this->ParentForm)
-		return this->ParentForm->Font;
+		return this->ParentForm->GetFont();
 	return GetDefaultFontObject();
 }
 SET_CPP(Control, class Font*, Font)
