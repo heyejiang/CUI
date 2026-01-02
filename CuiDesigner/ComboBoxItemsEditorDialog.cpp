@@ -58,11 +58,11 @@ void ComboBoxItemsEditorDialog::RefreshGridFromTarget()
 	if (!_grid) return;
 	_grid->Rows.Clear();
 	if (!_target) return;
-	for (int i = 0; i < _target->values.Count; i++)
+	for (int i = 0; i < _target->Items.Count; i++)
 	{
 		GridViewRow r;
 		r.Cells.Add(CellValue(false));
-		r.Cells.Add(CellValue(_target->values[i]));
+		r.Cells.Add(CellValue(_target->Items[i]));
 		r.Cells.Add(CellValue(L""));
 		r.Cells.Add(CellValue(L""));
 		r.Cells.Add(CellValue(L""));
@@ -177,7 +177,7 @@ ComboBoxItemsEditorDialog::ComboBoxItemsEditorDialog(ComboBox* target)
 		if (!_target || !_grid) { this->Close(); return; }
 		_grid->ChangeEditionSelected(-1, -1);
 
-		_target->values.Clear();
+		_target->Items.Clear();
 		int selectedIndex = -1;
 		for (int i = 0; i < _grid->Rows.Count; i++)
 		{
@@ -185,19 +185,19 @@ ComboBoxItemsEditorDialog::ComboBoxItemsEditorDialog(ComboBox* target)
 			if (row.Cells.Count <= COL_TEXT) continue;
 			auto t = Trim(row.Cells[COL_TEXT].Text);
 			if (t.empty()) continue;
-			const int outIndex = _target->values.Count;
-			_target->values.Add(t);
+			const int outIndex = _target->Items.Count;
+			_target->Items.Add(t);
 			if (row.Cells.Count > COL_DEFAULT && row.Cells[COL_DEFAULT].Tag)
 				selectedIndex = outIndex;
 		}
 		// 防御性修正
 		if (selectedIndex < 0) selectedIndex = 0;
-		if (selectedIndex >= _target->values.Count) selectedIndex = std::max(0, _target->values.Count - 1);
+		if (selectedIndex >= _target->Items.Count) selectedIndex = std::max(0, _target->Items.Count - 1);
 		_target->SelectedIndex = 0;
-		if (_target->values.Count > 0)
+		if (_target->Items.Count > 0)
 		{
 			_target->SelectedIndex = selectedIndex;
-			_target->Text = _target->values[_target->SelectedIndex];
+			_target->Text = _target->Items[_target->SelectedIndex];
 		}
 		else
 		{

@@ -29,6 +29,10 @@ public:
 	// 事件绑定：key 为事件成员名（如 OnMouseClick/OnTextChanged），value 为类成员函数名
 	// 仅用于设计期保存/加载与导出代码生成；运行时不自动绑定。
 	std::map<std::wstring, std::wstring> EventHandlers;
+
+	// 设计期附加数据（不一定映射到运行时属性）。
+	// 例如：MediaPlayer 的媒体源路径等。
+	std::unordered_map<std::wstring, std::wstring> DesignStrings;
 	
 	// 用于调整大小的句柄位置
 	enum class ResizeHandle
@@ -85,6 +89,7 @@ public:
 			{ UIClass::UI_Menu, L"Menu", L"菜单", {600, 28}, false },
 			{ UIClass::UI_StatusBar, L"StatusBar", L"状态栏", {600, 26}, false },
 			{ UIClass::UI_WebBrowser, L"WebBrowser", L"浏览器", {500, 360}, false },
+			{ UIClass::UI_MediaPlayer, L"MediaPlayer", L"媒体播放器", {640, 360}, false },
 		};
 	}
 };

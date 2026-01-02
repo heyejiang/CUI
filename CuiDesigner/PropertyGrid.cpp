@@ -17,6 +17,7 @@
 #include "../CUI/GUI/TabControl.h"
 #include "../CUI/GUI/ToolBar.h"
 #include "../CUI/GUI/StatusBar.h"
+#include "../CUI/GUI/MediaPlayer.h"
 #include "../CUI/GUI/Layout/StackPanel.h"
 #include "../CUI/GUI/Layout/WrapPanel.h"
 #include "../CUI/GUI/Layout/DockPanel.h"
@@ -1037,17 +1038,17 @@ void PropertyGrid::CreateEnumPropertyItem(std::wstring propertyName, const std::
 
 	auto valueCombo = new ComboBox(L"", (width - 30) / 2 + 15, yOffset, (width - 30) / 2, 20);
 	valueCombo->ParentForm = this->ParentForm;
-	valueCombo->values.Clear();
-	for (auto& o : options) valueCombo->values.Add(o);
+	valueCombo->Items.Clear();
+	for (auto& o : options) valueCombo->Items.Add(o);
 
 	int idx = 0;
-	for (int i = 0; i < valueCombo->values.Count; i++)
+	for (int i = 0; i < valueCombo->Items.Count; i++)
 	{
-		if (valueCombo->values[i] == value) { idx = i; break; }
+		if (valueCombo->Items[i] == value) { idx = i; break; }
 	}
 	valueCombo->SelectedIndex = idx;
-	if (valueCombo->values.Count > 0 && idx >= 0 && idx < valueCombo->values.Count)
-		valueCombo->Text = valueCombo->values[idx];
+	if (valueCombo->Items.Count > 0 && idx >= 0 && idx < valueCombo->Items.Count)
+		valueCombo->Text = valueCombo->Items[idx];
 	else
 		valueCombo->Text = value;
 
@@ -1325,8 +1326,8 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 			{
 				auto* cb = (ComboBox*)ctrl;
 				cb->SelectedIndex = std::stoi(value);
-				if (cb->values.Count > 0 && cb->SelectedIndex >= 0 && cb->SelectedIndex < cb->values.Count)
-					cb->Text = cb->values[cb->SelectedIndex];
+				if (cb->Items.Count > 0 && cb->SelectedIndex >= 0 && cb->SelectedIndex < cb->Items.Count)
+					cb->Text = cb->Items[cb->SelectedIndex];
 			}
 		}
 		else if (propertyName == L"TitleHeight")
@@ -1360,6 +1361,36 @@ void PropertyGrid::UpdatePropertyFromTextBox(std::wstring propertyName, std::wst
 			{
 				::ImageSizeMode m;
 				if (TryParseImageSizeMode(value, m)) ctrl->SizeMode = m;
+			}
+		}
+		else if (propertyName == L"MediaFile")
+		{
+			if (_currentControl->Type == UIClass::UI_MediaPlayer)
+			{
+				// 设计期字段：仅保存路径，不在设计器里自动加载/播放
+				_currentControl->DesignStrings[L"mediaFile"] = TrimWs(value);
+			}
+		}
+		else if (propertyName == L"RenderMode")
+		{
+			if (ctrl->Type() == UIClass::UI_MediaPlayer)
+			{
+				auto* mp = (MediaPlayer*)ctrl;
+				auto v = TrimWs(value);
+				if (v == L"Fit") mp->RenderMode = MediaPlayer::VideoRenderMode::Fit;
+				else if (v == L"Fill") mp->RenderMode = MediaPlayer::VideoRenderMode::Fill;
+				else if (v == L"Stretch") mp->RenderMode = MediaPlayer::VideoRenderMode::Stretch;
+				else if (v == L"Center") mp->RenderMode = MediaPlayer::VideoRenderMode::Center;
+				else if (v == L"UniformToFill") mp->RenderMode = MediaPlayer::VideoRenderMode::UniformToFill;
+			}
+		}
+		else if (propertyName == L"PlaybackRate")
+		{
+			if (ctrl->Type() == UIClass::UI_MediaPlayer)
+			{
+				float r = 1.0f;
+				if (TryParseFloatWs(TrimWs(value), r))
+					((MediaPlayer*)ctrl)->PlaybackRate = r;
 			}
 		}
 		else if (propertyName == L"SelectedBackColor")
@@ -1475,6 +1506,14 @@ void PropertyGrid::UpdatePropertyFromFloat(std::wstring propertyName, float valu
 				pb->PercentageValue = v;
 			}
 		}
+		else if (propertyName == L"Volume")
+		{
+			if (ctrl->Type() == UIClass::UI_MediaPlayer)
+			{
+				float v = std::clamp(value, 0.0f, 1.0f);
+				((MediaPlayer*)ctrl)->Volume = (double)v;
+			}
+		}
 	}
 	catch (...) {}
 
@@ -1578,6 +1617,16 @@ void PropertyGrid::UpdatePropertyFromBool(std::wstring propertyName, bool value)
 	{
 		if (ctrl->Type() == UIClass::UI_StatusBar)
 			((StatusBar*)ctrl)->TopMost = value;
+	}
+	else if (propertyName == L"AutoPlay")
+	{
+		if (ctrl->Type() == UIClass::UI_MediaPlayer)
+			((MediaPlayer*)ctrl)->AutoPlay = value;
+	}
+	else if (propertyName == L"Loop")
+	{
+		if (ctrl->Type() == UIClass::UI_MediaPlayer)
+			((MediaPlayer*)ctrl)->Loop = value;
 	}
 
 	if (auto* p = dynamic_cast<Panel*>(ctrl->Parent))
@@ -1770,6 +1819,29 @@ void PropertyGrid::LoadControl(std::shared_ptr<DesignerControl> control)
 		CreatePropertyItem(L"Value", std::to_wstring(s->Value), yOffset);
 		CreatePropertyItem(L"Step", std::to_wstring(s->Step), yOffset);
 		CreateBoolPropertyItem(L"SnapToStep", s->SnapToStep, yOffset);
+	}
+	if (control->Type == UIClass::UI_MediaPlayer)
+	{
+		auto* mp = (MediaPlayer*)ctrl;
+		std::wstring mediaFile;
+		auto it = control->DesignStrings.find(L"mediaFile");
+		if (it != control->DesignStrings.end()) mediaFile = it->second;
+		CreatePropertyItem(L"MediaFile", mediaFile, yOffset);
+		CreateBoolPropertyItem(L"AutoPlay", mp->AutoPlay, yOffset);
+		CreateBoolPropertyItem(L"Loop", mp->Loop, yOffset);
+		CreateFloatSliderPropertyItem(L"Volume", (float)mp->Volume, 0.0f, 1.0f, 0.01f, yOffset);
+		CreatePropertyItem(L"PlaybackRate", FloatToText(mp->PlaybackRate), yOffset);
+		std::wstring rm = L"Fit";
+		switch (mp->RenderMode)
+		{
+		case MediaPlayer::VideoRenderMode::Fit: rm = L"Fit"; break;
+		case MediaPlayer::VideoRenderMode::Fill: rm = L"Fill"; break;
+		case MediaPlayer::VideoRenderMode::Stretch: rm = L"Stretch"; break;
+		case MediaPlayer::VideoRenderMode::Center: rm = L"Center"; break;
+		case MediaPlayer::VideoRenderMode::UniformToFill: rm = L"UniformToFill"; break;
+		default: rm = L"Fit"; break;
+		}
+		CreateEnumPropertyItem(L"RenderMode", rm, { L"Fit", L"Fill", L"Stretch", L"Center", L"UniformToFill" }, yOffset);
 	}
 
 	// 事件（设计期映射，仅用于导出代码）

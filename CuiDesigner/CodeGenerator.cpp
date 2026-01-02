@@ -20,6 +20,7 @@
 #include "../CUI/GUI/TreeView.h"
 #include "../CUI/GUI/Menu.h"
 #include "../CUI/GUI/StatusBar.h"
+#include "../CUI/GUI/MediaPlayer.h"
 
 #include "../CUI/GUI/Layout/GridPanel.h"
 #include "../CUI/GUI/Layout/StackPanel.h"
@@ -368,6 +369,7 @@ std::string CodeGenerator::GetControlTypeName(UIClass type)
 	case UIClass::UI_Menu: return "Menu";
 	case UIClass::UI_StatusBar: return "StatusBar";
 	case UIClass::UI_WebBrowser: return "WebBrowser";
+	case UIClass::UI_MediaPlayer: return "MediaPlayer";
 	default: return "Control";
 	}
 }
@@ -709,12 +711,12 @@ std::string CodeGenerator::GenerateControlCommonProperties(const std::shared_ptr
 	if (dc->Type == UIClass::UI_ComboBox)
 	{
 		auto* cb = (ComboBox*)ctrl;
-		if (cb->values.Count > 0)
+		if (cb->Items.Count > 0)
 		{
-			code << indentStr << name << "->values.Clear();\n";
-			for (int i = 0; i < cb->values.Count; i++)
+			code << indentStr << name << "->Items.Clear();\n";
+			for (int i = 0; i < cb->Items.Count; i++)
 			{
-				code << indentStr << name << "->values.Add(L\"" << EscapeWStringLiteral(cb->values[i]) << "\");\n";
+				code << indentStr << name << "->Items.Add(L\"" << EscapeWStringLiteral(cb->Items[i]) << "\");\n";
 			}
 			code << indentStr << name << "->SelectedIndex = " << cb->SelectedIndex << ";\n";
 		}
@@ -933,6 +935,41 @@ std::string CodeGenerator::GenerateControlCommonProperties(const std::shared_ptr
 					emitSub(top, var);
 			}
 		}
+	}
+
+	// MediaPlayer
+	if (dc->Type == UIClass::UI_MediaPlayer)
+	{
+		auto* mp = (MediaPlayer*)ctrl;
+		// 先生成属性，再 Load（让 AutoPlay 等影响 Load 行为）
+		if (!mp->AutoPlay)
+			code << indentStr << name << "->AutoPlay = false;\n";
+		if (mp->Loop)
+			code << indentStr << name << "->Loop = true;\n";
+		if (std::fabs(mp->Volume - 1.0) > 1e-9)
+			code << indentStr << name << "->Volume = " << mp->Volume << ";\n";
+		if (std::fabs(mp->PlaybackRate - 1.0f) > 1e-6f)
+			code << indentStr << name << "->PlaybackRate = " << FloatLiteral(mp->PlaybackRate) << ";\n";
+		if (mp->RenderMode != MediaPlayer::VideoRenderMode::Fit)
+		{
+			const char* rm = "MediaPlayer::VideoRenderMode::Fit";
+			switch (mp->RenderMode)
+			{
+			case MediaPlayer::VideoRenderMode::Fit: rm = "MediaPlayer::VideoRenderMode::Fit"; break;
+			case MediaPlayer::VideoRenderMode::Fill: rm = "MediaPlayer::VideoRenderMode::Fill"; break;
+			case MediaPlayer::VideoRenderMode::Stretch: rm = "MediaPlayer::VideoRenderMode::Stretch"; break;
+			case MediaPlayer::VideoRenderMode::Center: rm = "MediaPlayer::VideoRenderMode::Center"; break;
+			case MediaPlayer::VideoRenderMode::UniformToFill: rm = "MediaPlayer::VideoRenderMode::UniformToFill"; break;
+			default: rm = "MediaPlayer::VideoRenderMode::Fit"; break;
+			}
+			code << indentStr << name << "->RenderMode = " << rm << ";\n";
+		}
+
+		// 设计期媒体源路径（不强依赖运行时已加载）
+		auto it = dc->DesignStrings.find(L"mediaFile");
+		std::wstring mf = (it != dc->DesignStrings.end()) ? it->second : mp->MediaFile;
+		if (!mf.empty())
+			code << indentStr << name << "->Load(L\"" << EscapeWStringLiteral(mf) << "\");\n";
 	}
 
 	return code.str();

@@ -21,6 +21,7 @@
 #include "../CUI/GUI/Menu.h"
 #include "../CUI/GUI/StatusBar.h"
 #include "../CUI/GUI/WebBrowser.h"
+#include "../CUI/GUI/MediaPlayer.h"
 #include "../CUI/GUI/Layout/StackPanel.h"
 #include "../CUI/GUI/Layout/GridPanel.h"
 #include "../CUI/GUI/Layout/DockPanel.h"
@@ -2294,6 +2295,10 @@ void DesignerCanvas::AddControlToCanvas(UIClass type, POINT canvasPos)
 		newControl = new WebBrowser(centerX, centerY, 500, 360);
 		typeName = L"WebBrowser";
 		break;
+	case UIClass::UI_MediaPlayer:
+		newControl = new MediaPlayer(centerX, centerY, 640, 360);
+		typeName = L"MediaPlayer";
+		break;
 	default:
 		return;
 	}
@@ -2546,6 +2551,7 @@ static bool IsExportableDesignType(UIClass t)
 	case UIClass::UI_Menu:
 	case UIClass::UI_StatusBar:
 	case UIClass::UI_WebBrowser:
+	case UIClass::UI_MediaPlayer:
 		return true;
 	default:
 		return false;
@@ -2582,6 +2588,7 @@ static std::wstring ExportTypeName(UIClass t)
 	case UIClass::UI_WrapPanel: return L"WrapPanel";
 	case UIClass::UI_RelativePanel: return L"RelativePanel";
 	case UIClass::UI_PictureBox: return L"PictureBox";
+	case UIClass::UI_MediaPlayer: return L"MediaPlayer";
 	default: return L"Control";
 	}
 }
@@ -2735,6 +2742,7 @@ namespace
 		case UIClass::UI_Menu: return "Menu";
 		case UIClass::UI_StatusBar: return "StatusBar";
 		case UIClass::UI_WebBrowser: return "WebBrowser";
+		case UIClass::UI_MediaPlayer: return "MediaPlayer";
 		case UIClass::UI_TabPage: return "TabPage";
 		default: return "Control";
 		}
@@ -2767,6 +2775,7 @@ namespace
 		if (s == "Menu") { out = UIClass::UI_Menu; return true; }
 		if (s == "StatusBar") { out = UIClass::UI_StatusBar; return true; }
 		if (s == "WebBrowser") { out = UIClass::UI_WebBrowser; return true; }
+		if (s == "MediaPlayer") { out = UIClass::UI_MediaPlayer; return true; }
 		if (s == "TabPage") { out = UIClass::UI_TabPage; return true; }
 		return false;
 	}
@@ -3282,8 +3291,8 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 			{
 				auto* cb = (ComboBox*)c;
 				Json items = Json::array();
-				for (int i = 0; i < cb->values.Count; i++)
-					items.push_back(ToUtf8(cb->values[i]));
+				for (int i = 0; i < cb->Items.Count; i++)
+					items.push_back(ToUtf8(cb->Items[i]));
 				extra["items"] = items;
 				extra["selectedIndex"] = cb->SelectedIndex;
 			}
@@ -3418,6 +3427,19 @@ bool DesignerCanvas::SaveDesignFile(const std::wstring& filePath, std::wstring* 
 					tops.push_back(MenuItemToJson(it));
 				}
 				extra["items"] = tops;
+			}
+			else if (dc->Type == UIClass::UI_MediaPlayer)
+			{
+				auto* mp = (MediaPlayer*)c;
+				// 设计期保存：媒体源路径放在 DesignStrings 中，避免加载文件也能保持可往返。
+				auto it = dc->DesignStrings.find(L"mediaFile");
+				std::wstring mediaFile = (it != dc->DesignStrings.end()) ? it->second : mp->MediaFile;
+				if (!mediaFile.empty()) extra["mediaFile"] = ToUtf8(mediaFile);
+				extra["autoPlay"] = mp->AutoPlay;
+				extra["loop"] = mp->Loop;
+				extra["volume"] = mp->Volume;
+				extra["playbackRate"] = mp->PlaybackRate;
+				extra["renderMode"] = (int)mp->RenderMode;
 			}
 
 			if (!extra.empty()) item["extra"] = extra;
@@ -3656,6 +3678,7 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 			case UIClass::UI_Menu: return new Menu(0, 0, 600, 28);
 			case UIClass::UI_StatusBar: return new StatusBar(0, 0, 600, 26);
 			case UIClass::UI_WebBrowser: return new WebBrowser(0, 0, 500, 360);
+			case UIClass::UI_MediaPlayer: return new MediaPlayer(0, 0, 640, 360);
 			default: return nullptr;
 			}
 		};
@@ -3850,15 +3873,15 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 				else if (it.type == UIClass::UI_ComboBox)
 				{
 					auto* cb = (ComboBox*)c;
-					cb->values.Clear();
+					cb->Items.Clear();
 					if (it.extra.contains("items") && it.extra["items"].is_array())
 					{
 						for (auto& sj : it.extra["items"])
-							if (sj.is_string()) cb->values.Add(FromUtf8(sj.get<std::string>()));
+							if (sj.is_string()) cb->Items.Add(FromUtf8(sj.get<std::string>()));
 					}
 					cb->SelectedIndex = it.extra.value("selectedIndex", cb->SelectedIndex);
-					if (cb->values.Count > 0 && cb->SelectedIndex >= 0 && cb->SelectedIndex < cb->values.Count)
-						cb->Text = cb->values[cb->SelectedIndex];
+					if (cb->Items.Count > 0 && cb->SelectedIndex >= 0 && cb->SelectedIndex < cb->Items.Count)
+						cb->Text = cb->Items[cb->SelectedIndex];
 				}
 				else if (it.type == UIClass::UI_GridView)
 				{
@@ -3920,6 +3943,20 @@ bool DesignerCanvas::LoadDesignFile(const std::wstring& filePath, std::wstring* 
 							sb->AddPart(text, w);
 						}
 					}
+				}
+				else if (it.type == UIClass::UI_MediaPlayer)
+				{
+					auto* mp = (MediaPlayer*)c;
+					// 仅恢复属性与“媒体源路径”字段；不在设计器中自动加载/播放媒体。
+					mp->AutoPlay = it.extra.value("autoPlay", mp->AutoPlay);
+					mp->Loop = it.extra.value("loop", mp->Loop);
+					mp->Volume = it.extra.value("volume", mp->Volume);
+					mp->PlaybackRate = (float)it.extra.value("playbackRate", (double)mp->PlaybackRate);
+					mp->RenderMode = (MediaPlayer::VideoRenderMode)it.extra.value("renderMode", (int)mp->RenderMode);
+					if (it.extra.contains("mediaFile") && it.extra["mediaFile"].is_string())
+						dc->DesignStrings[L"mediaFile"] = FromUtf8(it.extra["mediaFile"].get<std::string>());
+					else
+						dc->DesignStrings.erase(L"mediaFile");
 				}
 				else if (it.type == UIClass::UI_Menu)
 				{
