@@ -22,7 +22,9 @@
 
 - **仅支持 Windows**：依赖 Windows 图形栈（Direct2D/DirectWrite/DirectComposition）。
 - **Windows版本限制**：CUI仅支持Windows8+,CUI_Legacy支持Windows7(不含WebBrowser)
-- **第三方依赖**：WebView2,CppUtils/Graphics  CppUtils/Graphics在开源在https://github.com/JieML1100/CppUtils
+- **第三方依赖**：WebView2,CppUtils/Graphics  CppUtils/Graphics开源在https://github.com/JieML1100/CppUtils
 - **设计器输出**：设计器会保存 JSON 设计文件并生成 C++ 代码；建议将生成代码纳入版本控制、设计文件作为 UI 源文件长期维护。
 
+## 交流社区
+- **QQ群**：522222570
 许可证：AFL 3.0，见 `LICENSE`。
