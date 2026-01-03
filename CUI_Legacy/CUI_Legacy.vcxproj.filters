@@ -224,5 +224,14 @@
     <ClCompile Include="GUI\MediaPlayer.cpp">
       <Filter>GUI</Filter>
     </ClCompile>
+    <ClCompile Include="..\CppUtils\Graphics\BitmapSource.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\CppUtils\Graphics\Factory.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\CppUtils\Graphics\Font.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

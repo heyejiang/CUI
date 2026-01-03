@@ -9,6 +9,10 @@
 #include <windowsx.h>
 #pragma comment(lib, "Dwmapi.lib")
 
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+
 HCURSOR Form::GetSystemCursor(CursorKind kind)
 {
 	static std::unordered_map<CursorKind, HCURSOR> cache;
@@ -726,7 +730,7 @@ class Font* Form::GetFont()
 {
 	if (this->_font)
 		return this->_font;
-	return GetDefaultFontObject();
+	return GetScaledDefaultFont();
 }
 
 void Form::SetFont(class Font* value)
@@ -848,6 +852,7 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 	static bool ClassInited = false;
 	this->Location = _location;
 	this->Size = _size;
+	this->_headHeightBase96 = this->HeadHeight;
 	WNDCLASSW wndclass = { 0 };
 	if (!ClassInited)
 	{
@@ -891,8 +896,126 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 
 	// Win7 兼容版：不使用 DirectComposition / swapchain composition
 	Render = new HwndGraphics(this->Handle);
+	Render->SetDpi(96.0f, 96.0f);
 	OverlayRender = nullptr;
 	ClearCaptionStates();
+}
+
+Font* Form::GetScaledDefaultFont()
+{
+	UINT dpi = this->_dpi ? this->_dpi : 96;
+	if (_scaledDefaultFont && _scaledDefaultFontDpi == dpi)
+		return _scaledDefaultFont;
+	if (_scaledDefaultFont)
+	{
+		delete _scaledDefaultFont;
+		_scaledDefaultFont = nullptr;
+	}
+	// 以默认字体为基准按 DPI 缩放字号
+	auto base = GetDefaultFontObject();
+	const float size = Application::ScaleFloat(base->FontSize, 96, dpi);
+	_scaledDefaultFont = new Font(base->FontName, size);
+	_scaledDefaultFontDpi = dpi;
+	return _scaledDefaultFont;
+}
+
+void Form::ScaleControlTreeForDpi(UINT fromDpi, UINT toDpi)
+{
+	if (fromDpi == 0) fromDpi = 96;
+	if (toDpi == 0) toDpi = 96;
+	if (fromDpi == toDpi) return;
+
+	std::function<void(Control*)> scale;
+	scale = [&](Control* c)
+		{
+			if (!c) return;
+			c->_location.x = Application::ScaleInt(c->_location.x, fromDpi, toDpi);
+			c->_location.y = Application::ScaleInt(c->_location.y, fromDpi, toDpi);
+			c->_size.cx = Application::ScaleInt(c->_size.cx, fromDpi, toDpi);
+			c->_size.cy = Application::ScaleInt(c->_size.cy, fromDpi, toDpi);
+			c->_layoutBaseLocation.x = Application::ScaleInt(c->_layoutBaseLocation.x, fromDpi, toDpi);
+			c->_layoutBaseLocation.y = Application::ScaleInt(c->_layoutBaseLocation.y, fromDpi, toDpi);
+			c->_layoutBaseSize.cx = Application::ScaleInt(c->_layoutBaseSize.cx, fromDpi, toDpi);
+			c->_layoutBaseSize.cy = Application::ScaleInt(c->_layoutBaseSize.cy, fromDpi, toDpi);
+			c->_minSize.cx = Application::ScaleInt(c->_minSize.cx, fromDpi, toDpi);
+			c->_minSize.cy = Application::ScaleInt(c->_minSize.cy, fromDpi, toDpi);
+			if (c->_maxSize.cx != INT_MAX) c->_maxSize.cx = Application::ScaleInt(c->_maxSize.cx, fromDpi, toDpi);
+			if (c->_maxSize.cy != INT_MAX) c->_maxSize.cy = Application::ScaleInt(c->_maxSize.cy, fromDpi, toDpi);
+			c->_margin.Left = Application::ScaleFloat(c->_margin.Left, fromDpi, toDpi);
+			c->_margin.Top = Application::ScaleFloat(c->_margin.Top, fromDpi, toDpi);
+			c->_margin.Right = Application::ScaleFloat(c->_margin.Right, fromDpi, toDpi);
+			c->_margin.Bottom = Application::ScaleFloat(c->_margin.Bottom, fromDpi, toDpi);
+			c->_padding.Left = Application::ScaleFloat(c->_padding.Left, fromDpi, toDpi);
+			c->_padding.Top = Application::ScaleFloat(c->_padding.Top, fromDpi, toDpi);
+			c->_padding.Right = Application::ScaleFloat(c->_padding.Right, fromDpi, toDpi);
+			c->_padding.Bottom = Application::ScaleFloat(c->_padding.Bottom, fromDpi, toDpi);
+
+			if (c->_font && c->_ownsFont)
+			{
+				c->_font->FontSize = Application::ScaleFloat(c->_font->FontSize, fromDpi, toDpi);
+			}
+			for (int i = 0; i < c->Count; i++)
+				scale(c->operator[](i));
+		};
+
+	for (auto c : this->Controls) scale(c);
+	if (this->MainMenu) scale((Control*)this->MainMenu);
+	if (this->MainStatusBar) scale((Control*)this->MainStatusBar);
+	if (this->ForegroundControl) scale(this->ForegroundControl);
+}
+
+void Form::ApplyDpiChange(UINT newDpi)
+{
+	if (newDpi == 0) newDpi = 96;
+	UINT oldContentDpi = this->_contentDpi ? this->_contentDpi : 96;
+	this->_dpi = newDpi;
+	if (oldContentDpi == newDpi) return;
+
+	this->HeadHeight = Application::ScaleInt(this->_headHeightBase96, 96, newDpi);
+	this->_scaledDefaultFontDpi = 0;
+
+	if (this->_font && this->_ownsFont)
+		this->_font->FontSize = Application::ScaleFloat(this->_font->FontSize, oldContentDpi, newDpi);
+
+	ScaleControlTreeForDpi(oldContentDpi, newDpi);
+	this->_contentDpi = newDpi;
+	this->InvalidateLayout();
+	this->_hasRenderedOnce = false;
+	this->Invalidate(false);
+}
+
+void Form::EnsureInitialDpiApplied()
+{
+	if (_initialDpiApplied) return;
+	_initialDpiApplied = true;
+	if (!this->Handle) return;
+
+	Application::EnsureDpiAwareness();
+	UINT dpi = Application::GetDpiForWindow(this->Handle);
+	if (dpi == 0) dpi = 96;
+	this->_dpi = dpi;
+	if (this->_contentDpi == 0) this->_contentDpi = 96;
+	if (this->_headHeightBase96 <= 0) this->_headHeightBase96 = 24;
+
+	// 1) 首次显示前先把窗口大小按 96->dpi 缩放一次
+	if (!this->_initialWindowRectApplied)
+	{
+		RECT wr{};
+		GetWindowRect(this->Handle, &wr);
+		const int oldW = wr.right - wr.left;
+		const int oldH = wr.bottom - wr.top;
+		const int newW = Application::ScaleInt(this->_Size_INTI.cx, 96, dpi);
+		const int newH = Application::ScaleInt(this->_Size_INTI.cy, 96, dpi);
+		const int x = wr.left + (oldW - newW) / 2;
+		const int y = wr.top + (oldH - newH) / 2;
+		SetWindowPos(this->Handle, NULL, x, y, newW, newH, SWP_NOZORDER | SWP_NOACTIVATE);
+		SyncRenderSizeToClient();
+		this->_hasRenderedOnce = false;
+		this->Invalidate(false);
+	}
+
+	// 2) 控件树/字体/标题栏统一做一次 96->dpi 缩放
+	ApplyDpiChange(dpi);
 }
 
 Form::~Form()
@@ -905,6 +1028,12 @@ void Form::CleanupResources()
 	if (_resourcesCleaned)
 		return;
 	_resourcesCleaned = true;
+	if (_scaledDefaultFont)
+	{
+		delete _scaledDefaultFont;
+		_scaledDefaultFont = nullptr;
+		_scaledDefaultFontDpi = 0;
+	}
 	if (this->Handle && _dropRegistered)
 	{
 		RevokeDragDrop(this->Handle);
@@ -1160,11 +1289,25 @@ void Form::PerformLayout()
 	_needsLayout = false;
 }
 
+void Form::SyncRenderSizeToClient()
+{
+	if (!this->Handle || !this->Render) return;
+	RECT rc{};
+	::GetClientRect(this->Handle, &rc);
+	UINT width = (UINT)std::max<LONG>(1, rc.right - rc.left);
+	UINT height = (UINT)std::max<LONG>(1, rc.bottom - rc.top);
+	this->Render->ReSize(width, height);
+	if (this->OverlayRender) this->OverlayRender->ReSize(width, height);
+}
+
 void Form::Show()
 {
+	EnsureInitialDpiApplied();
 	if (this->Icon) SendMessage(this->Handle, WM_SETICON, ICON_BIG, (LPARAM)this->Icon);
 	SetWindowLong(this->Handle, GWL_STYLE, WS_POPUP);
 	ShowWindow(this->Handle, SW_SHOWNORMAL);
+	SyncRenderSizeToClient();
+	this->OnSizeChanged(this);
 	this->Invalidate(true);
 }
 static HWND GetBestOwnerWindowInCurrentProcess(HWND exclude = NULL)
@@ -1213,9 +1356,13 @@ void Form::ShowDialog(HWND parent)
 		EnableWindow(owner, FALSE);
 	}
 
+	EnsureInitialDpiApplied();
+
 	if (this->Icon) SendMessage(this->Handle, WM_SETICON, ICON_BIG, (LPARAM)this->Icon);
 	SetWindowLong(this->Handle, GWL_STYLE, WS_POPUP);
 	ShowWindow(this->Handle, SW_SHOWNORMAL);
+	SyncRenderSizeToClient();
+	this->OnSizeChanged(this);
 	this->Invalidate(true);
 	SetForegroundWindow(this->Handle);
 	SetActiveWindow(this->Handle);
@@ -2003,9 +2150,10 @@ D2D1_RECT_F Form::ChildRect()
 	}
 	return D2D1_RECT_F{ left,top,right,bottom };
 }
-LRESULT CustomFrameHitTest(HWND _hWnd, WPARAM wParam, LPARAM lParam, int captionHeight)
+LRESULT CustomFrameHitTest(HWND _hWnd, WPARAM wParam, LPARAM lParam, int captionHeight, UINT dpi)
 {
-#define SCALER_WIDTH 8
+	// 边框命中宽度按 DPI 缩放，避免高 DPI 下 resize 命中区域过窄。
+	const int SCALER_WIDTH = Application::ScaleInt(8, 96, dpi ? dpi : 96);
 #define BORDER_WIDTH 1
 	RECT wr, cr;
 	const POINT ptMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -2063,6 +2211,36 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 	Form* form = (Form*)(GetWindowLongPtrW(hWnd, GWLP_USERDATA) ^ 0xFFFFFFFFFFFFFFFF);
 	if ((ULONG64)form != 0xFFFFFFFFFFFFFFFF && Application::Forms.ContainsKey(form->Handle))
 	{
+		if (message == WM_DPICHANGED)
+		{
+			RECT* suggested = (RECT*)lParam;
+			if (suggested)
+			{
+				SetWindowPos(hWnd, NULL,
+					suggested->left,
+					suggested->top,
+					suggested->right - suggested->left,
+					suggested->bottom - suggested->top,
+					SWP_NOZORDER | SWP_NOACTIVATE);
+			}
+			UINT newDpi = HIWORD(wParam);
+			// 首次显示前可能控件树未构造完成：先只记录 DPI，真正缩放留到 Show 前。
+			if (!form->_initialDpiApplied)
+			{
+				form->_dpi = newDpi;
+				form->_initialWindowRectApplied = true;
+				form->SyncRenderSizeToClient();
+				form->_hasRenderedOnce = false;
+				form->Invalidate(false);
+				return 0;
+			}
+			form->ApplyDpiChange(newDpi);
+			form->SyncRenderSizeToClient();
+			form->_hasRenderedOnce = false;
+			form->Invalidate(false);
+			return 0;
+		}
+
 		form->ProcessMessage(message, wParam, lParam, 0, 0);
 
 		switch (message)
@@ -2116,7 +2294,7 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 			LRESULT lr;
 			if (!DwmDefWindowProc(hWnd, message, wParam, lParam, &lr))
 			{
-				lr = CustomFrameHitTest(hWnd, wParam, lParam, form->ClientTop());
+				lr = CustomFrameHitTest(hWnd, wParam, lParam, form->ClientTop(), form->_dpi);
 				if (lr == HTCAPTION)
 				{
 					POINT ptClient{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };

@@ -2,6 +2,7 @@
 #pragma comment(linker, "/subsystem:\"windows\" /entry:\"mainCRTStartup\"")
 int main()
 {
+	Application::EnsureDpiAwareness();
 	DemoWindow fm;
 	fm.Show();
 	auto notify = TestNotifyIcon(fm.Handle);

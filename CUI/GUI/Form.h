@@ -116,6 +116,19 @@ private:
 	class LayoutEngine* _layoutEngine = nullptr;
 	bool _needsLayout = false;
 	bool _resourcesCleaned = false;
+	// ---- DPI ----
+	UINT _dpi = 96;
+	UINT _contentDpi = 96; // 控件树/布局当前已应用的 DPI
+	bool _initialDpiApplied = false;
+	bool _initialWindowRectApplied = false;
+	int _headHeightBase96 = 24;
+	void SyncRenderSizeToClient();
+	Font* _scaledDefaultFont = nullptr;
+	UINT _scaledDefaultFontDpi = 0;
+	Font* GetScaledDefaultFont();
+	void ApplyDpiChange(UINT newDpi);
+	void ScaleControlTreeForDpi(UINT fromDpi, UINT toDpi);
+	void EnsureInitialDpiApplied();
 	// 鼠标 Hover/Leave 跟踪
 	bool _mouseLeaveTracking = false;
 	class Control* _hoverControl = NULL;

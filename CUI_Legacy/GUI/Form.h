@@ -28,6 +28,7 @@
 #include "TreeView.h"
 #include "Taskbar.h"
 #include "NotifyIcon.h"
+#include "MediaPlayer.h"
 
 typedef Event<void(class Form* sender, int Id, int info)> CommandEvent;
 typedef Event<void(class Form*)> FormClosingEvent;
@@ -85,6 +86,19 @@ private:
 	UINT_PTR _animTimerId = 0xC001;
 	UINT _animIntervalMs = 0;
 	bool _hasRenderedOnce = false;
+	void SyncRenderSizeToClient();
+	// ---- DPI ----
+	UINT _dpi = 96;
+	UINT _contentDpi = 96; // 控件树/布局当前已应用的 DPI
+	bool _initialDpiApplied = false;
+	bool _initialWindowRectApplied = false;
+	int _headHeightBase96 = 24;
+	Font* _scaledDefaultFont = nullptr;
+	UINT _scaledDefaultFontDpi = 0;
+	Font* GetScaledDefaultFont();
+	void ApplyDpiChange(UINT newDpi);
+	void ScaleControlTreeForDpi(UINT fromDpi, UINT toDpi);
+	void EnsureInitialDpiApplied();
 	void InvalidateControl(class Control* c, int inflatePx = 2, bool immediate = false);
 	void InvalidateAnimatedControls(bool immediate = false);
 	static bool RectIntersects(const RECT& a, const RECT& b);
