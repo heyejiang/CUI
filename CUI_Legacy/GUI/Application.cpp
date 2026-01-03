@@ -1,4 +1,85 @@
 ﻿#include "Application.h"
+
+#include <windows.h>
+
+namespace
+{
+	static UINT GetSystemDpiFallback()
+	{
+		HDC hdc = GetDC(NULL);
+		if (!hdc) return 96;
+		const int dpiX = GetDeviceCaps(hdc, LOGPIXELSX);
+		ReleaseDC(NULL, hdc);
+		return (dpiX > 0) ? (UINT)dpiX : 96;
+	}
+
+	static UINT QueryDpiForWindow(HWND hwnd)
+	{
+		auto user32 = GetModuleHandleW(L"user32.dll");
+		if (user32)
+		{
+			typedef UINT(WINAPI* GetDpiForWindow_t)(HWND);
+			auto pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(user32, "GetDpiForWindow");
+			if (pGetDpiForWindow && hwnd)
+			{
+				UINT dpi = pGetDpiForWindow(hwnd);
+				if (dpi >= 96) return dpi;
+			}
+
+			typedef UINT(WINAPI* GetDpiForSystem_t)();
+			auto pGetDpiForSystem = (GetDpiForSystem_t)GetProcAddress(user32, "GetDpiForSystem");
+			if (pGetDpiForSystem)
+			{
+				UINT dpi = pGetDpiForSystem();
+				if (dpi >= 96) return dpi;
+			}
+		}
+		return GetSystemDpiFallback();
+	}
+
+	static void EnableDpiAwarenessOnce()
+	{
+		static bool done = false;
+		if (done) return;
+		done = true;
+
+		if (auto user32 = GetModuleHandleW(L"user32.dll"))
+		{
+			typedef BOOL(WINAPI* SetProcessDpiAwarenessContext_t)(HANDLE);
+			auto pSetCtx = (SetProcessDpiAwarenessContext_t)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+			if (pSetCtx)
+			{
+				HANDLE PMV2 = (HANDLE)-4;
+				if (pSetCtx(PMV2)) return;
+				HANDLE PMV1 = (HANDLE)-3;
+				if (pSetCtx(PMV1)) return;
+			}
+		}
+
+		if (auto shcore = LoadLibraryW(L"Shcore.dll"))
+		{
+			typedef HRESULT(WINAPI* SetProcessDpiAwareness_t)(int);
+			auto pSet = (SetProcessDpiAwareness_t)GetProcAddress(shcore, "SetProcessDpiAwareness");
+			if (pSet)
+			{
+				if (SUCCEEDED(pSet(2)))
+				{
+					FreeLibrary(shcore);
+					return;
+				}
+			}
+			FreeLibrary(shcore);
+		}
+
+		if (auto user32 = GetModuleHandleW(L"user32.dll"))
+		{
+			typedef BOOL(WINAPI* SetProcessDPIAware_t)();
+			auto pSet = (SetProcessDPIAware_t)GetProcAddress(user32, "SetProcessDPIAware");
+			if (pSet)
+				pSet();
+		}
+	}
+}
 Dictionary<HWND, class Form*>  Application::Forms = Dictionary<HWND, class Form*>();
 
 bool Application::DesignMode = false;
@@ -45,4 +126,35 @@ std::string Application::UserAppDataPath()
 RegistryKey Application::UserAppDataRegistry()
 {
 	return RegistryKey(HKEY_CURRENT_USER, StringHelper::Format("Software\\%s", ApplicationName().c_str()));
+} 
+
+void Application::EnsureDpiAwareness()
+{
+	EnableDpiAwarenessOnce();
+}
+
+UINT Application::GetSystemDpi()
+{
+	return QueryDpiForWindow(NULL);
+}
+
+UINT Application::GetDpiForWindow(HWND hwnd)
+{
+	return QueryDpiForWindow(hwnd);
+}
+
+int Application::ScaleInt(int value, UINT fromDpi, UINT toDpi)
+{
+	if (fromDpi == 0) fromDpi = 96;
+	if (toDpi == 0) toDpi = 96;
+	if (fromDpi == toDpi) return value;
+	return MulDiv(value, (int)toDpi, (int)fromDpi);
+}
+
+float Application::ScaleFloat(float value, UINT fromDpi, UINT toDpi)
+{
+	if (fromDpi == 0) fromDpi = 96;
+	if (toDpi == 0) toDpi = 96;
+	if (fromDpi == toDpi) return value;
+	return value * ((float)toDpi / (float)fromDpi);
 }

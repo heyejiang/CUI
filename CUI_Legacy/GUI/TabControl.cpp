@@ -21,6 +21,29 @@ TabControl::TabControl(int x, int y, int width, int height)
 	this->Size = SIZE{ width,height };
 }
 
+static void SyncNativeChildWindowsRecursive(Control* root)
+{
+	if (!root) return;
+	// 目前库里只有 WebBrowser 会创建真实 HWND 子窗口；后续有更多原生控件也可在此扩展
+	if (root->Type() == UIClass::UI_WebBrowser)
+	{
+		// 强制跑一次 Update：它会根据 IsVisual/Visible 同步宿主 HWND 的 Show/Hide/Bounds
+		root->Update();
+	}
+	for (int i = 0; i < root->Count; i++)
+		SyncNativeChildWindowsRecursive(root->operator[](i));
+}
+
+static void SyncNativeChildWindowsForAllPages(TabControl* tc)
+{
+	if (!tc) return;
+	for (int i = 0; i < tc->Count; i++)
+	{
+		auto page = tc->operator[](i);
+		SyncNativeChildWindowsRecursive(page);
+	}
+}
+
 TabPage* TabControl::AddPage(std::wstring name)
 {
 	TabPage* result = this->AddControl(new TabPage(name));
@@ -35,6 +58,8 @@ TabPage* TabControl::AddPage(std::wstring name)
 	{
 		this->operator[](i)->Visible = (this->SelectIndex == i);
 	}
+	// 新增页后也同步一次原生子窗口（避免被隐藏页“遗留显示”）
+	SyncNativeChildWindowsForAllPages(this);
 	return result;
 }
 GET_CPP(TabControl, int, PageCount)
@@ -94,7 +119,11 @@ void TabControl::Update()
 			}
 			page->Update();
 
-			this->_lastSelectIndex = this->SelectIndex;
+			if (this->_lastSelectIndex != this->SelectIndex)
+			{
+				SyncNativeChildWindowsForAllPages(this);
+				this->_lastSelectIndex = this->SelectIndex;
+			}
 		}
 		d2d->DrawRect(abslocation.x, abslocation.y + this->TitleHeight, size.cx, size.cy - this->TitleHeight, this->BolderColor, this->Boder);
 	}
@@ -139,6 +168,8 @@ bool TabControl::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int 
 					this->operator[](i)->Visible = (i == this->SelectIndex);
 				}
 
+				// 同步隐藏页的 WebBrowser 之类的原生子窗口
+				SyncNativeChildWindowsForAllPages(this);
 				this->_lastSelectIndex = this->SelectIndex;
 
 				this->_capturedChild = NULL;

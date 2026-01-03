@@ -33,7 +33,7 @@ struct ID2D1Bitmap;
 
 inline Font* GetDefaultFontObject()
 {
-	static Font defaultFont(L"Arial", 18.0f);
+	static Font defaultFont(L"Arial", 14.0f);
 	return &defaultFont;
 }
 

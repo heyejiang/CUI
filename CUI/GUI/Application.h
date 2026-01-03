@@ -64,4 +64,21 @@ public:
 	 */
 	static RegistryKey UserAppDataRegistry();
 
+	// ---- DPI helpers ----
+	/**
+	 * @brief 尽可能启用 Per-Monitor V2 DPI Awareness（失败则自动降级）。
+	 *
+	 * 建议在创建任何窗口之前调用；Form 构造时也会兜底调用一次。
+	 */
+	static void EnsureDpiAwareness();
+	/** @brief 返回系统 DPI（默认 96）。 */
+	static UINT GetSystemDpi();
+	/** @brief 返回指定窗口的 DPI（失败则回退到系统 DPI）。 */
+	static UINT GetDpiForWindow(HWND hwnd);
+	/**
+	 * @brief 将 value 从 fromDpi 缩放到 toDpi。
+	 */
+	static int ScaleInt(int value, UINT fromDpi, UINT toDpi);
+	static float ScaleFloat(float value, UINT fromDpi, UINT toDpi);
+
 };

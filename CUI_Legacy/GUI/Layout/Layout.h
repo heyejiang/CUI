@@ -2,10 +2,12 @@
 
 /**
  * @file Layout.h
- * @brief Layout：布局系统聚合头（Legacy）。
+ * @brief 布局系统聚合头文件。
+ *
+ * 直接包含该文件可获得所有布局相关类型与容器控件：
+ * - LayoutTypes / LayoutEngine
+ * - StackPanel / GridPanel / DockPanel / WrapPanel / RelativePanel
  */
-
-// 布局系统头文件 - 包含所有布局相关类
 
 #include "LayoutTypes.h"
 #include "LayoutEngine.h"
