@@ -330,7 +330,6 @@ DemoWindow_Legacy::DemoWindow_Legacy() : Form(L"", { 0,0 }, { 1280,640 })
 	tabControl1->AddPage(L"Grid View")->BackColor = D2D1_COLOR_F{ 1.0f,1.0f,1.0f,0.3f };
 	tabControl1->AddPage(L"Icon Buttons")->BackColor = D2D1_COLOR_F{ 1.0f,1.0f,1.0f,0.3f };
 	tabControl1->AddPage(L"Layout Demo")->BackColor = D2D1_COLOR_F{ 1.0f,1.0f,1.0f,0.3f };
-	tabControl1->AddPage(L"WebBrowser")->BackColor = D2D1_COLOR_F{ 1.0f,1.0f,1.0f,0.3f };
 	tabControl1->AddPage(L"Media Player")->BackColor = D2D1_COLOR_F{ 1.0f,1.0f,1.0f,0.3f };
 	tabControl1->get(0)->AddControl(new Label(L"基本容器", 10, 10));
 
