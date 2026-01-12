@@ -120,3 +120,4 @@ dkms.conf
 /CUITest/CUITest/x64
 /CUITest_Legacy/x64
 /CUITest_Legacy/CUITest_Legacy/x64/Release
+/MediaLibrary/.vs/MediaLibrary

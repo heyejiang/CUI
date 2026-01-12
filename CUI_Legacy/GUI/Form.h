@@ -169,8 +169,8 @@ public:
 	class Menu* MainMenu = NULL;
 	// 状态栏：单独管理（置底但置顶于普通控件；需要独立渲染与消息处理）
 	class StatusBar* MainStatusBar = NULL;
-	D2DGraphics* Render;
-	D2DGraphics* OverlayRender = nullptr;
+	D2DGraphics1* Render;
+	D2DGraphics1* OverlayRender = nullptr;
 	int HeadHeight = 24;
 	D2D1_COLOR_F BackColor = Colors::WhiteSmoke;
 	D2D1_COLOR_F ForeColor = Colors::Black;

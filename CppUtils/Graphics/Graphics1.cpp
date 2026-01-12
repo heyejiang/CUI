@@ -8,6 +8,7 @@
 #include <d2derr.h>
 
 #include <d3d11.h>
+#include <d3d10_1.h>
 #include <dxgi1_2.h>
 
 #pragma comment(lib, "d3d11.lib")
@@ -41,7 +42,7 @@ namespace {
 			return S_OK;
 		}
 
-		UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+		UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT;
 #if defined(_DEBUG)
 		flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -84,6 +85,13 @@ namespace {
 		}
 		if (FAILED(hr)) {
 			return hr;
+		}
+
+		// 共享设备会被 UI 线程（D2D）与后台线程（例如视频解码/处理）并发使用。
+		// 启用 multithread protection，避免 D3D11 immediate context 的跨线程调用引发未定义行为。
+		ComPtr<ID3D10Multithread> multithread;
+		if (SUCCEEDED(dev.As(&multithread)) && multithread) {
+			multithread->SetMultithreadProtected(TRUE);
 		}
 
 		ComPtr<IDXGIDevice> dxgiDevice;
