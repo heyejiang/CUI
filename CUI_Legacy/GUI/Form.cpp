@@ -895,7 +895,7 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 	Application::Forms.Add(this->Handle, this);
 
 	// Win7 兼容版：不使用 DirectComposition / swapchain composition
-	Render = new HwndGraphics1(this->Handle);
+	Render = new HwndGraphics(this->Handle);
 	Render->SetDpi(96.0f, 96.0f);
 	OverlayRender = nullptr;
 	ClearCaptionStates();

@@ -855,7 +855,7 @@ void DemoWindow::BuildTab_Media(TabPage* page)
 	CheckBox* loop = controlPanel->AddControl(new CheckBox(L"循环", 740, 16));
 	loop->OnChecked += [mp](class Control* sender) { mp->Loop = ((CheckBox*)sender)->Checked; };
 
-	Label* progressLabel = controlPanel->AddControl(new Label(L"进度", 10, 62));
+	Label* progressLabel = controlPanel->AddControl(new Label(L"进度", 10, 84));
 	progressLabel->ForeColor = Colors::LightGray;
 
 	Slider* progressSlider = controlPanel->AddControl(new Slider(60, 58, 900, 30));
@@ -864,9 +864,9 @@ void DemoWindow::BuildTab_Media(TabPage* page)
 	progressSlider->Value = 0;
 	progressSlider->AnchorStyles = AnchorStyles::Left | AnchorStyles::Right | AnchorStyles::Bottom;
 
-	Label* timeLabel = controlPanel->AddControl(new Label(L"00:00 / 00:00", 970, 62));
+	Label* timeLabel = controlPanel->AddControl(new Label(L"00:00 / 00:00", 970, 40));
 	timeLabel->ForeColor = Colors::LightGray;
-	timeLabel->AnchorStyles = AnchorStyles::Right | AnchorStyles::Bottom;
+	timeLabel->AnchorStyles = AnchorStyles::Right | AnchorStyles::Top;
 	timeLabel->Width = 200;
 
 	progressSlider->OnValueChanged += [mp, progressUpdating](class Control* sender, float oldValue, float newValue)

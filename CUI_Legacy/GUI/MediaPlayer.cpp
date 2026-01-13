@@ -14,6 +14,8 @@
 #include <functiondiscoverykeys_devpkey.h>
 #include <avrt.h>
 
+#include <ppl.h>
+
 #include <atomic>
 
 // ============================================================================
@@ -39,6 +41,133 @@ static void DebugOutputHr(const wchar_t* context, HRESULT hr)
 	wchar_t buf[512] = {};
 	swprintf_s(buf, L"%s: 0x%08X\n", context ? context : L"", (unsigned)hr);
 	OutputDebugStringW(buf);
+}
+
+static LARGE_INTEGER QpcNow()
+{
+	LARGE_INTEGER t{};
+	QueryPerformanceCounter(&t);
+	return t;
+}
+
+static LARGE_INTEGER QpcFreq()
+{
+	static LARGE_INTEGER f{};
+	static std::atomic<bool> inited{ false };
+	bool expected = false;
+	if (inited.compare_exchange_strong(expected, true))
+		QueryPerformanceFrequency(&f);
+	return f;
+}
+
+static double QpcTicksToMs(UINT64 ticks)
+{
+	const auto f = QpcFreq();
+	if (f.QuadPart <= 0) return 0.0;
+	return (double)ticks * 1000.0 / (double)f.QuadPart;
+}
+
+static inline uint8_t Clip8(int v)
+{
+	return (uint8_t)((v < 0) ? 0 : (v > 255 ? 255 : v));
+}
+
+// NV12 (Y + interleaved UV) -> BGRA
+// 说明：这是 CPU 后备/分析路径，目标是把 MF 的 video processing 从 ReadSample 里挪出来，便于定位瓶颈。
+void MediaPlayer::ConvertNV12ToBGRA(
+	const uint8_t* nv12,
+	size_t nv12Bytes,
+	UINT32 yStride,
+	UINT32 width,
+	UINT32 height,
+	UINT32 cropX,
+	UINT32 cropY,
+	UINT32 visibleW,
+	UINT32 visibleH,
+	std::vector<uint8_t>& outBgra)
+{
+	if (!nv12 || yStride == 0 || width == 0 || height == 0 || visibleW == 0 || visibleH == 0) return;
+	// 需要保证 UV 对齐：NV12 的 UV 采样为 2x2
+	const UINT32 cx = cropX & ~1u;
+	const UINT32 cy = cropY & ~1u;
+	UINT32 w = (visibleW & ~1u);
+	UINT32 h = (visibleH & ~1u);
+	if (cx >= width || cy >= height) return;
+	if (cy + h > height) h = (height - cy) & ~1u;
+	if (cx + w > width) w = (width - cx) & ~1u;
+	if (w == 0 || h == 0) return;
+
+	// stride 需要能覆盖可视宽度，否则会越界
+	if (yStride <= cx) return;
+	UINT32 maxWByStride = (yStride - cx) & ~1u;
+	if (w > maxWByStride) w = maxWByStride;
+	if (w == 0) return;
+
+	const UINT32 uvStride = yStride;
+	if (uvStride <= cx) return;
+	UINT32 maxWByUvStride = (uvStride - cx) & ~1u;
+	if (w > maxWByUvStride) w = maxWByUvStride;
+	if (w == 0) return;
+
+	// 检查 buffer 大小：Y plane + UV plane
+	const UINT32 uvRows = (height + 1) / 2;
+	const size_t yBytes = (size_t)yStride * (size_t)height;
+	const size_t uvBytes = (size_t)uvStride * (size_t)uvRows;
+	if (yBytes > nv12Bytes) return;
+	if (uvBytes > (nv12Bytes - yBytes)) return;
+
+	const uint8_t* yPlane = nv12;
+	const uint8_t* uvPlane = nv12 + yBytes;
+
+	outBgra.resize((size_t)w * (size_t)h * 4);
+
+	auto convertRow = [&](UINT32 row)
+	{
+		const uint8_t* yRow = yPlane + (size_t)(cy + row) * (size_t)yStride + cx;
+		const uint8_t* uvRow = uvPlane + (size_t)((cy + row) / 2) * (size_t)uvStride + cx;
+		uint8_t* dst = outBgra.data() + (size_t)row * (size_t)w * 4;
+
+		for (UINT32 col = 0; col < w; col += 2)
+		{
+			const int U = (int)uvRow[col + 0] - 128;
+			const int V = (int)uvRow[col + 1] - 128;
+			const int c0 = (int)yRow[col + 0] - 16;
+			const int c1 = (int)yRow[col + 1] - 16;
+			const int C0 = (c0 < 0) ? 0 : c0;
+			const int C1 = (c1 < 0) ? 0 : c1;
+
+			// BT.601-ish integer approximation.
+			const int rAdd = 409 * V;
+			const int gAdd = -100 * U - 208 * V;
+			const int bAdd = 516 * U;
+
+			int r = (298 * C0 + rAdd + 128) >> 8;
+			int g = (298 * C0 + gAdd + 128) >> 8;
+			int b = (298 * C0 + bAdd + 128) >> 8;
+			dst[(size_t)col * 4 + 0] = Clip8(b);
+			dst[(size_t)col * 4 + 1] = Clip8(g);
+			dst[(size_t)col * 4 + 2] = Clip8(r);
+			dst[(size_t)col * 4 + 3] = 0xFF;
+
+			r = (298 * C1 + rAdd + 128) >> 8;
+			g = (298 * C1 + gAdd + 128) >> 8;
+			b = (298 * C1 + bAdd + 128) >> 8;
+			dst[(size_t)(col + 1) * 4 + 0] = Clip8(b);
+			dst[(size_t)(col + 1) * 4 + 1] = Clip8(g);
+			dst[(size_t)(col + 1) * 4 + 2] = Clip8(r);
+			dst[(size_t)(col + 1) * 4 + 3] = 0xFF;
+		}
+	};
+
+	// 4K 帧行数大，按行并行可明显降低 VConv；小帧保持串行减少调度开销。
+	if (h >= 256)
+	{
+		Concurrency::parallel_for(0, (int)h, [&](int r) { convertRow((UINT32)r); });
+	}
+	else
+	{
+		for (UINT32 row = 0; row < h; row++) convertRow(row);
+	}
 }
 
 #pragma comment(lib, "d3d11.lib")
@@ -918,6 +1047,7 @@ bool MediaPlayer::ConfigureSourceReaderVideoType()
 	// 尝试多种视频格式以提高兼容性
 	// RGB32 (BGRA) 是最兼容的格式，Direct2D 原生支持
 	GUID formats[] = {
+		MFVideoFormat_NV12,
 		MFVideoFormat_RGB32,
 		MFVideoFormat_ARGB32,
 		MFVideoFormat_RGB24,
@@ -925,6 +1055,8 @@ bool MediaPlayer::ConfigureSourceReaderVideoType()
 
 	for (int i = 0; i < (int)(sizeof(formats) / sizeof(formats[0])); i++)
 	{
+		if (!_preferNv12VideoOutput && formats[i] == MFVideoFormat_NV12)
+			continue;
 		ComPtr<IMFMediaType> mt;
 		if (FAILED(MFCreateMediaType(&mt)) || !mt) continue;
 		if (FAILED(mt->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video))) continue;
@@ -936,6 +1068,7 @@ bool MediaPlayer::ConfigureSourceReaderVideoType()
 		HRESULT hr = _sourceReader->SetCurrentMediaType(_srVideoStream, nullptr, mt.Get());
 		if (SUCCEEDED(hr))
 		{
+			_usingNv12VideoOutput = (formats[i] == MFVideoFormat_NV12);
 			// 刷新当前视频格式信息（尺寸/stride/像素格式/aperture）
 			UpdateVideoFormatFromSourceReader();
 			return true;
@@ -1024,6 +1157,14 @@ void MediaPlayer::UpdateVideoFormatFromSourceReader()
 				bytesPerPixel = 4;
 				if (stride == 0) stride = w * 4;
 			}
+			else if (subtype == MFVideoFormat_NV12)
+			{
+				// NV12: 8-bit 4:2:0 (Y + interleaved UV). 这里的 stride 指的是 Y plane stride。
+				// NV12 不应该按 bottom-up 解释（负 stride 常见于 RGB 位图）。
+				bottomUp = false;
+				bytesPerPixel = 1;
+				if (stride == 0 || stride < w) stride = w;
+			}
 			else if (subtype == MFVideoFormat_RGB24)
 			{
 				// RGB24: 每像素3字节，但需要对齐到4字节边界
@@ -1066,19 +1207,60 @@ bool MediaPlayer::InitSourceReader(const std::wstring& url)
 {
 	ShutdownSourceReader();
 
-	ComPtr<IMFAttributes> attr;
-	HRESULT hr = MFCreateAttributes(&attr, 8);
-	if (FAILED(hr)) { DebugOutputHr(L"SourceReader: MFCreateAttributes", hr); return false; }
-	// Force software decode / enable conversion.
-	(void)attr->SetUINT32(MF_SOURCE_READER_DISABLE_DXVA, TRUE);
-	(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+	HRESULT hr = S_OK;
+	_usingHardwareDecode = false;
+	_usingNv12VideoOutput = false;
 
-	hr = MFCreateSourceReaderFromURL(url.c_str(), attr.Get(), &_sourceReader);
-	if (FAILED(hr))
+	// 第一阶段：尽量在 Win7 环境也可用的方式启用“硬件变换/硬解”(由系统解码器+驱动决定)，
+	// 但仍保持输出为 RGB32（通过 SourceReader 的 video processing），以便复用现有 CPU->D2D 位图渲染链路。
+	if (_enableHardwareDecode)
 	{
-		DebugOutputHr(L"SourceReader: MFCreateSourceReaderFromURL failed", hr);
-		_lastMfError = hr;
-		return false;
+		ComPtr<IMFAttributes> attr;
+		hr = MFCreateAttributes(&attr, 10);
+		if (FAILED(hr)) { DebugOutputHr(L"SourceReader: MFCreateAttributes(HW)", hr); return false; }
+
+		(void)attr->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+		// 不设置 MF_SOURCE_READER_DISABLE_DXVA，让 MF 自行选择 DXVA/软件路径。
+		// 若优先 NV12，则关闭 MF video processing（否则会把颜色转换成本算进 ReadSample）。
+		(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, _preferNv12VideoOutput ? FALSE : TRUE);
+
+		hr = MFCreateSourceReaderFromURL(url.c_str(), attr.Get(), &_sourceReader);
+		if (FAILED(hr) && hr == E_INVALIDARG)
+		{
+			// 某些系统/解码器对 HW_TRANSFORMS 属性不接受（返回 E_INVALIDARG），做一次温和降级再试。
+			DebugOutputHr(L"SourceReader: HW init got E_INVALIDARG, retry without HW_TRANSFORMS", hr);
+			attr.Reset();
+			if (SUCCEEDED(MFCreateAttributes(&attr, 8)))
+			{
+				(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, _preferNv12VideoOutput ? FALSE : TRUE);
+				hr = MFCreateSourceReaderFromURL(url.c_str(), attr.Get(), &_sourceReader);
+			}
+		}
+		if (SUCCEEDED(hr) && _sourceReader)
+		{
+			_usingHardwareDecode = true;
+			DebugOutputHr(L"SourceReader: HW transforms/DXVA mode (best-effort)", S_OK);
+		}
+	}
+
+	// 失败回退：维持原先强制软解配置（最稳）
+	if (!_sourceReader)
+	{
+		ComPtr<IMFAttributes> attr;
+		hr = MFCreateAttributes(&attr, 8);
+		if (FAILED(hr)) { DebugOutputHr(L"SourceReader: MFCreateAttributes(SW)", hr); return false; }
+		(void)attr->SetUINT32(MF_SOURCE_READER_DISABLE_DXVA, TRUE);
+		(void)attr->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, FALSE);
+		(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+
+		hr = MFCreateSourceReaderFromURL(url.c_str(), attr.Get(), &_sourceReader);
+		if (FAILED(hr))
+		{
+			DebugOutputHr(L"SourceReader: MFCreateSourceReaderFromURL failed (final)", hr);
+			_lastMfError = hr;
+			return false;
+		}
+		DebugOutputHr(L"SourceReader: SW decode mode", S_OK);
 	}
 
 	// Ensure streams are selected.
@@ -1173,6 +1355,10 @@ bool MediaPlayer::WriteAudioToWasapi(const BYTE* data, UINT32 bytes)
 	if (!_audioClient || !_audioRenderClient || !_audioMixFormat) return false;
 	if (!data || bytes == 0) return true;
 
+	_statAudioWriteCalls.fetch_add(1, std::memory_order_relaxed);
+	_statAudioWriteBytes.fetch_add(bytes, std::memory_order_relaxed);
+	const LARGE_INTEGER t0 = QpcNow();
+
 	// 防止卡死：若音频引擎未推进（padding 永远满）或外部已请求停止，避免在此无限等待。
 	const ULONGLONG startTick = GetTickCount64();
 
@@ -1219,6 +1405,8 @@ bool MediaPlayer::WriteAudioToWasapi(const BYTE* data, UINT32 bytes)
 		if (FAILED(hr)) { DebugOutputHr(L"WASAPI: ReleaseBuffer", hr); return false; }
 		offset += framesToWrite * bytesPerFrame;
 	}
+	const LARGE_INTEGER t1 = QpcNow();
+	_statAudioWriteQpcTicks.fetch_add((UINT64)(t1.QuadPart - t0.QuadPart), std::memory_order_relaxed);
 	return true;
 }
 
@@ -1268,7 +1456,12 @@ void MediaPlayer::PlaybackThreadMain()
 		DWORD flags = 0;
 		LONGLONG ts = 0;
 		ComPtr<IMFSample> sample;
+		_statReadSampleCalls.fetch_add(1, std::memory_order_relaxed);
+		const LARGE_INTEGER tRead0 = QpcNow();
 		HRESULT hr = _sourceReader->ReadSample(MF_SOURCE_READER_ANY_STREAM, 0, &streamIndex, &flags, &ts, &sample);
+		const LARGE_INTEGER tRead1 = QpcNow();
+		const UINT64 readTicks = (UINT64)(tRead1.QuadPart - tRead0.QuadPart);
+		_statReadSampleQpcTicks.fetch_add(readTicks, std::memory_order_relaxed);
 		if (FAILED(hr))
 		{
 			_lastMfError = hr;
@@ -1343,7 +1536,11 @@ void MediaPlayer::PlaybackThreadMain()
 		OnPositionChanged(this, _position);
 
 		ComPtr<IMFMediaBuffer> buf;
+		_statSamplesToContigCalls.fetch_add(1, std::memory_order_relaxed);
+		const LARGE_INTEGER tContig0 = QpcNow();
 		hr = sample->ConvertToContiguousBuffer(&buf);
+		const LARGE_INTEGER tContig1 = QpcNow();
+		_statSamplesToContigQpcTicks.fetch_add((UINT64)(tContig1.QuadPart - tContig0.QuadPart), std::memory_order_relaxed);
 		if (FAILED(hr) || !buf) continue;
 		BYTE* p = nullptr;
 		DWORD maxLen = 0, curLen = 0;
@@ -1361,6 +1558,16 @@ void MediaPlayer::PlaybackThreadMain()
 		}
 		const bool isVideo = (majorType == MFMediaType_Video);
 		const bool isAudio = (majorType == MFMediaType_Audio);
+		if (isVideo)
+		{
+			_statReadSampleVideoCalls.fetch_add(1, std::memory_order_relaxed);
+			_statReadSampleVideoQpcTicks.fetch_add(readTicks, std::memory_order_relaxed);
+		}
+		else if (isAudio)
+		{
+			_statReadSampleAudioCalls.fetch_add(1, std::memory_order_relaxed);
+			_statReadSampleAudioQpcTicks.fetch_add(readTicks, std::memory_order_relaxed);
+		}
 
 		// 若发生类型变化，刷新视频格式信息（尺寸/stride/像素格式）。
 		if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0 && isVideo)
@@ -1385,15 +1592,48 @@ void MediaPlayer::PlaybackThreadMain()
 			const UINT32 cropY = _videoCropY;
 			if (frameW > 0 && frameH > 0 && w > 0 && h > 0)
 			{
+				_statDecodedVideoFrames.fetch_add(1, std::memory_order_relaxed);
+				_statVideoConvertCalls.fetch_add(1, std::memory_order_relaxed);
+				const LARGE_INTEGER tVid0 = QpcNow();
+				GUID subtype{};
 				UINT32 srcStride = 0;
 				UINT32 bpp = 4;
 				bool bottomUp = false;
 				{
 					std::scoped_lock lock(_videoFrameMutex);
+					subtype = _videoSubtype;
 					srcStride = _videoStride;
 					bpp = (_videoBytesPerPixel == 0) ? 4 : _videoBytesPerPixel;
 					bottomUp = _videoBottomUp;
 				}
+
+				if (subtype == MFVideoFormat_NV12)
+				{
+					// NV12: p points to NV12 contiguous buffer.
+					if (srcStride == 0) srcStride = (UINT32)frameW;
+					std::vector<uint8_t> converted;
+					ConvertNV12ToBGRA(p, (size_t)curLen, srcStride, (UINT32)frameW, (UINT32)frameH, cropX, cropY, (UINT32)w, (UINT32)h, converted);
+					if (!converted.empty())
+					{
+						{
+							std::scoped_lock lock(_videoFrameMutex);
+							_videoFrame = std::move(converted);
+							_videoFrameStride = (UINT32)w * 4;
+							_videoFrameReady = true;
+						}
+						const LARGE_INTEGER tVid1 = QpcNow();
+						_statVideoConvertQpcTicks.fetch_add((UINT64)(tVid1.QuadPart - tVid0.QuadPart), std::memory_order_relaxed);
+						_statVideoConvertBytes.fetch_add((UINT64)w * (UINT64)h * 4ULL, std::memory_order_relaxed);
+						this->PostRender();
+					}
+					else
+					{
+						const LARGE_INTEGER tVid1 = QpcNow();
+						_statVideoConvertQpcTicks.fetch_add((UINT64)(tVid1.QuadPart - tVid0.QuadPart), std::memory_order_relaxed);
+					}
+					continue;
+				}
+
 
 				const UINT32 minStride = (UINT32)frameW * bpp;
 				if (srcStride == 0) srcStride = minStride;
@@ -1439,10 +1679,18 @@ void MediaPlayer::PlaybackThreadMain()
 					{
 						std::scoped_lock lock(_videoFrameMutex);
 						_videoFrame = std::move(converted);
-						_videoStride = (UINT32)w * 4;
+						_videoFrameStride = (UINT32)w * 4;
 						_videoFrameReady = true;
 					}
+					const LARGE_INTEGER tVid1 = QpcNow();
+					_statVideoConvertQpcTicks.fetch_add((UINT64)(tVid1.QuadPart - tVid0.QuadPart), std::memory_order_relaxed);
+					_statVideoConvertBytes.fetch_add((UINT64)w * (UINT64)h * 4ULL, std::memory_order_relaxed);
 					this->PostRender();
+				}
+				else
+				{
+					const LARGE_INTEGER tVid1 = QpcNow();
+					_statVideoConvertQpcTicks.fetch_add((UINT64)(tVid1.QuadPart - tVid0.QuadPart), std::memory_order_relaxed);
 				}
 			}
 		}
@@ -1840,7 +2088,7 @@ void MediaPlayer::OnVideoFrame(const BYTE* data, DWORD size)
 
 	{
 		std::scoped_lock lock(_videoFrameMutex);
-		_videoStride = expectedStride;
+		_videoFrameStride = expectedStride;
 		_videoFrame = std::move(normalized);
 		_videoFrameReady = true;
 	}
@@ -1919,6 +2167,7 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 			std::scoped_lock lock(_videoFrameMutex);
 			_videoFrame.clear();
 			_videoFrameReady = false;
+			_videoFrameStride = 0;
 			_videoStride = 0;
 			_videoSubtype = GUID_NULL;
 			_videoBytesPerPixel = 4;
@@ -1974,6 +2223,7 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 	{
 		std::scoped_lock lock(_videoFrameMutex);
 		_videoFrame.clear();
+		_videoFrameStride = 0;
 		_videoStride = 0;
 		_videoFrameReady = false;
 	}
@@ -2293,6 +2543,7 @@ void MediaPlayer::ReleaseResources()
 	{
 		std::scoped_lock lock(_videoFrameMutex);
 		_videoFrame.clear();
+		_videoFrameStride = 0;
 		_videoStride = 0;
 		_videoFrameReady = false;
 	}
@@ -2319,6 +2570,7 @@ void MediaPlayer::UpdateVideoBitmap()
 void MediaPlayer::Update()
 {
 	if (!this->IsVisual) return;
+	_statRenderUpdates.fetch_add(1, std::memory_order_relaxed);
 
 	auto abs = this->AbsLocation;
 	auto size = this->ActualSize();
@@ -2340,16 +2592,20 @@ void MediaPlayer::Update()
 	{
 		std::vector<uint8_t> frame;
 		UINT32 stride = 0;
+		bool hasNewFrame = false;
 		{
 			std::scoped_lock lock(_videoFrameMutex);
 			if (_videoFrameReady)
 			{
-				frame = _videoFrame;
-				stride = _videoStride;
+				frame.swap(_videoFrame);
+				stride = _videoFrameStride;
+				_videoFrameReady = false;
+				hasNewFrame = true;
 			}
 		}
 
-		if (!frame.empty() && _videoSize.cx > 0 && _videoSize.cy > 0 && stride > 0)
+		// 只有在有新帧时才上传；否则继续绘制上一帧，避免闪烁（背景黑屏）。
+		if (hasNewFrame && !frame.empty() && _videoSize.cx > 0 && _videoSize.cy > 0 && stride > 0)
 		{
 			// 如果视频尺寸发生变化，必须重建 bitmap，否则右侧/下侧可能残留旧像素（常见表现为绿色条）。
 			if (_videoBitmap)
@@ -2380,6 +2636,9 @@ void MediaPlayer::Update()
 
 			if (_videoBitmap)
 			{
+				_statVideoUploadCalls.fetch_add(1, std::memory_order_relaxed);
+				_statVideoUploadBytes.fetch_add((UINT64)frame.size(), std::memory_order_relaxed);
+				const LARGE_INTEGER tUp0 = QpcNow();
 				const UINT32 w = (UINT32)_videoSize.cx;
 				const UINT32 h = (UINT32)_videoSize.cy;
 				const UINT32 expectedStride = w * 4;
@@ -2406,85 +2665,179 @@ void MediaPlayer::Update()
 					// stride 元数据不可信但数据是连续的：按 expectedStride 写入
 					_videoBitmap->CopyFromMemory(nullptr, frame.data(), expectedStride);
 				}
-				
-				// 根据渲染模式计算目标矩形
-				float destX = (float)abs.x;
-				float destY = (float)abs.y;
-				float destWidth = (float)size.cx;
-				float destHeight = (float)size.cy;
-				
-				float videoWidth = (float)_videoSize.cx;
-				float videoHeight = (float)_videoSize.cy;
-				
-				switch (_renderMode)
-				{
-				case VideoRenderMode::Fit: // 等比缩放，居中显示（默认）
-					{
-						float scaleX = destWidth / videoWidth;
-						float scaleY = destHeight / videoHeight;
-						float scale = (scaleX < scaleY) ? scaleX : scaleY;
-						
-						float scaledWidth = videoWidth * scale;
-						float scaledHeight = videoHeight * scale;
-						
-						destX += (destWidth - scaledWidth) * 0.5f;
-						destY += (destHeight - scaledHeight) * 0.5f;
-						destWidth = scaledWidth;
-						destHeight = scaledHeight;
-					}
-					break;
-					
-				case VideoRenderMode::Fill: // 等比缩放，裁剪以填满
-					{
-						float scaleX = destWidth / videoWidth;
-						float scaleY = destHeight / videoHeight;
-						float scale = (scaleX > scaleY) ? scaleX : scaleY;
-						
-						float scaledWidth = videoWidth * scale;
-						float scaledHeight = videoHeight * scale;
-						
-						destX += (destWidth - scaledWidth) * 0.5f;
-						destY += (destHeight - scaledHeight) * 0.5f;
-						destWidth = scaledWidth;
-						destHeight = scaledHeight;
-					}
-					break;
-					
-				case VideoRenderMode::Stretch: // 拉伸填充，可能变形
-					// 使用控件完整尺寸，不需要调整
-					break;
-					
-				case VideoRenderMode::Center: // 原始尺寸，居中显示
-					{
-						destX += (destWidth - videoWidth) * 0.5f;
-						destY += (destHeight - videoHeight) * 0.5f;
-						destWidth = videoWidth;
-						destHeight = videoHeight;
-					}
-					break;
-					
-				case VideoRenderMode::UniformToFill: // 均匀填充（同Fill）
-					{
-						float scaleX = destWidth / videoWidth;
-						float scaleY = destHeight / videoHeight;
-						float scale = (scaleX > scaleY) ? scaleX : scaleY;
-						
-						float scaledWidth = videoWidth * scale;
-						float scaledHeight = videoHeight * scale;
-						
-						destX += (destWidth - scaledWidth) * 0.5f;
-						destY += (destHeight - scaledHeight) * 0.5f;
-						destWidth = scaledWidth;
-						destHeight = scaledHeight;
-					}
-					break;
-				}
-				
-				d2d->DrawBitmap(_videoBitmap, destX, destY, destWidth, destHeight);
-				return;
+				const LARGE_INTEGER tUp1 = QpcNow();
+				_statVideoUploadQpcTicks.fetch_add((UINT64)(tUp1.QuadPart - tUp0.QuadPart), std::memory_order_relaxed);
 			}
 		}
+
+		// 没有新帧也要继续绘制上一帧，避免闪烁
+		if (_videoBitmap && _videoSize.cx > 0 && _videoSize.cy > 0)
+		{
+			// 根据渲染模式计算目标矩形
+			float destX = (float)abs.x;
+			float destY = (float)abs.y;
+			float destWidth = (float)size.cx;
+			float destHeight = (float)size.cy;
+			
+			float videoWidth = (float)_videoSize.cx;
+			float videoHeight = (float)_videoSize.cy;
+			
+			switch (_renderMode)
+			{
+			case VideoRenderMode::Fit: // 等比缩放，居中显示（默认）
+				{
+					float scaleX = destWidth / videoWidth;
+					float scaleY = destHeight / videoHeight;
+					float scale = (scaleX < scaleY) ? scaleX : scaleY;
+					
+					float scaledWidth = videoWidth * scale;
+					float scaledHeight = videoHeight * scale;
+					
+					destX += (destWidth - scaledWidth) * 0.5f;
+					destY += (destHeight - scaledHeight) * 0.5f;
+					destWidth = scaledWidth;
+					destHeight = scaledHeight;
+				}
+				break;
+				
+			case VideoRenderMode::Fill: // 等比缩放，裁剪以填满
+				{
+					float scaleX = destWidth / videoWidth;
+					float scaleY = destHeight / videoHeight;
+					float scale = (scaleX > scaleY) ? scaleX : scaleY;
+					
+					float scaledWidth = videoWidth * scale;
+					float scaledHeight = videoHeight * scale;
+					
+					destX += (destWidth - scaledWidth) * 0.5f;
+					destY += (destHeight - scaledHeight) * 0.5f;
+					destWidth = scaledWidth;
+					destHeight = scaledHeight;
+				}
+				break;
+				
+			case VideoRenderMode::Stretch: // 拉伸填充，可能变形
+				// 使用控件完整尺寸，不需要调整
+				break;
+				
+			case VideoRenderMode::Center: // 原始尺寸，居中显示
+				{
+					destX += (destWidth - videoWidth) * 0.5f;
+					destY += (destHeight - videoHeight) * 0.5f;
+					destWidth = videoWidth;
+					destHeight = videoHeight;
+				}
+				break;
+				
+			case VideoRenderMode::UniformToFill: // 均匀填充（同Fill）
+				{
+					float scaleX = destWidth / videoWidth;
+					float scaleY = destHeight / videoHeight;
+					float scale = (scaleX > scaleY) ? scaleX : scaleY;
+					
+					float scaledWidth = videoWidth * scale;
+					float scaledHeight = videoHeight * scale;
+					
+					destX += (destWidth - scaledWidth) * 0.5f;
+					destY += (destHeight - scaledHeight) * 0.5f;
+					destWidth = scaledWidth;
+					destHeight = scaledHeight;
+				}
+				break;
+			}
+			
+			_statDrawBitmapCalls.fetch_add(1, std::memory_order_relaxed);
+			const LARGE_INTEGER tDraw0 = QpcNow();
+			d2d->DrawBitmap(_videoBitmap, destX, destY, destWidth, destHeight);
+			const LARGE_INTEGER tDraw1 = QpcNow();
+			_statDrawBitmapQpcTicks.fetch_add((UINT64)(tDraw1.QuadPart - tDraw0.QuadPart), std::memory_order_relaxed);
+			ReportPerfStatsIfDue();
+			return;
+		}
 	}
+	ReportPerfStatsIfDue();
+}
+
+void MediaPlayer::ReportPerfStatsIfDue()
+{
+	if (!_mediaLoaded) return;
+
+	const auto freq = QpcFreq();
+	if (freq.QuadPart <= 0) return;
+
+	const LONGLONG now = QpcNow().QuadPart;
+	LONGLONG last = _statLastReportQpc.load(std::memory_order_relaxed);
+	if (last != 0 && (now - last) < freq.QuadPart) return;
+	if (!_statLastReportQpc.compare_exchange_strong(last, now, std::memory_order_relaxed))
+		return;
+
+	const double intervalSec = (last == 0) ? 1.0 : (double)(now - last) / (double)freq.QuadPart;
+	if (intervalSec <= 0.0) return;
+
+	const UINT64 rsCalls = _statReadSampleCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 rsTicks = _statReadSampleQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 rsVC = _statReadSampleVideoCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 rsVT = _statReadSampleVideoQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 rsAC = _statReadSampleAudioCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 rsAT = _statReadSampleAudioQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 contigCalls = _statSamplesToContigCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 contigTicks = _statSamplesToContigQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 vFrames = _statDecodedVideoFrames.exchange(0, std::memory_order_relaxed);
+	const UINT64 vConvCalls = _statVideoConvertCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 vConvTicks = _statVideoConvertQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 vConvBytes = _statVideoConvertBytes.exchange(0, std::memory_order_relaxed);
+	const UINT64 aCalls = _statAudioWriteCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 aTicks = _statAudioWriteQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 aBytes = _statAudioWriteBytes.exchange(0, std::memory_order_relaxed);
+	const UINT64 uCalls = _statVideoUploadCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 uTicks = _statVideoUploadQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 uBytes = _statVideoUploadBytes.exchange(0, std::memory_order_relaxed);
+	const UINT64 dCalls = _statDrawBitmapCalls.exchange(0, std::memory_order_relaxed);
+	const UINT64 dTicks = _statDrawBitmapQpcTicks.exchange(0, std::memory_order_relaxed);
+	const UINT64 updCalls = _statRenderUpdates.exchange(0, std::memory_order_relaxed);
+
+	const double fps = (intervalSec > 0.0) ? (double)vFrames / intervalSec : 0.0;
+	const double readAvgMs = (rsCalls > 0) ? QpcTicksToMs(rsTicks) / (double)rsCalls : 0.0;
+	const double readVAvgMs = (rsVC > 0) ? QpcTicksToMs(rsVT) / (double)rsVC : 0.0;
+	const double readAAvgMs = (rsAC > 0) ? QpcTicksToMs(rsAT) / (double)rsAC : 0.0;
+	const double contigAvgMs = (contigCalls > 0) ? QpcTicksToMs(contigTicks) / (double)contigCalls : 0.0;
+	const double vConvAvgMs = (vConvCalls > 0) ? QpcTicksToMs(vConvTicks) / (double)vConvCalls : 0.0;
+	const double aAvgMs = (aCalls > 0) ? QpcTicksToMs(aTicks) / (double)aCalls : 0.0;
+	const double upAvgMs = (uCalls > 0) ? QpcTicksToMs(uTicks) / (double)uCalls : 0.0;
+	const double drawAvgMs = (dCalls > 0) ? QpcTicksToMs(dTicks) / (double)dCalls : 0.0;
+	const double vConvMBs = (intervalSec > 0.0) ? ((double)vConvBytes / (1024.0 * 1024.0)) / intervalSec : 0.0;
+	const double upMBs = (intervalSec > 0.0) ? ((double)uBytes / (1024.0 * 1024.0)) / intervalSec : 0.0;
+	const double aMBs = (intervalSec > 0.0) ? ((double)aBytes / (1024.0 * 1024.0)) / intervalSec : 0.0;
+
+	wchar_t buf[512] = {};
+	swprintf_s(
+		buf,
+		L"[MediaPlayer][Legacy][%.2fs] mode=%s nv12=%s upd=%llu fps=%.1f | ReadSample %llux %.3fms (V:%llux %.3fms A:%llux %.3fms) | Contig %llux %.3fms | VConv %llux %.3fms %.1fMB/s | Upload %llux %.3fms %.1fMB/s | Draw %llux %.3fms | Audio %llux %.3fms %.1fMB/s\n",
+		intervalSec,
+		(_usingHardwareDecode ? L"HW" : L"SW"),
+		(_usingNv12VideoOutput ? L"Y" : L"N"),
+		(unsigned long long)updCalls,
+		fps,
+		(unsigned long long)rsCalls,
+		readAvgMs,
+		(unsigned long long)rsVC,
+		readVAvgMs,
+		(unsigned long long)rsAC,
+		readAAvgMs,
+		(unsigned long long)contigCalls,
+		contigAvgMs,
+		(unsigned long long)vConvCalls,
+		vConvAvgMs,
+		vConvMBs,
+		(unsigned long long)uCalls,
+		upAvgMs,
+		upMBs,
+		(unsigned long long)dCalls,
+		drawAvgMs,
+		(unsigned long long)aCalls,
+		aAvgMs,
+		aMBs);
+	OutputDebugStringW(buf);
 }
 
 bool MediaPlayer::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof)
@@ -2634,6 +2987,36 @@ GET_CPP(MediaPlayer, bool, Loop)
 SET_CPP(MediaPlayer, bool, Loop)
 {
 	_loop = value;
+}
+
+GET_CPP(MediaPlayer, bool, EnableHardwareDecode)
+{
+	return _enableHardwareDecode;
+}
+
+SET_CPP(MediaPlayer, bool, EnableHardwareDecode)
+{
+	_enableHardwareDecode = value;
+}
+
+GET_CPP(MediaPlayer, bool, UsingHardwareDecode)
+{
+	return _usingHardwareDecode;
+}
+
+GET_CPP(MediaPlayer, bool, PreferNv12VideoOutput)
+{
+	return _preferNv12VideoOutput;
+}
+
+SET_CPP(MediaPlayer, bool, PreferNv12VideoOutput)
+{
+	_preferNv12VideoOutput = value;
+}
+
+GET_CPP(MediaPlayer, bool, UsingNv12VideoOutput)
+{
+	return _usingNv12VideoOutput;
 }
 
 GET_CPP(MediaPlayer, bool, HasVideo)

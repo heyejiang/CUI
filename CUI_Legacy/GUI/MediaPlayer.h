@@ -18,6 +18,7 @@
 #include <audioclient.h>
 #include <thread>
 #include <condition_variable>
+#include <atomic>
 
 using Microsoft::WRL::ComPtr;
 
@@ -157,6 +158,10 @@ private:
 	std::wstring _mediaFile;          // 当前加载的媒体文件路径
 	bool _autoPlay = true;            // 是否自动播放
 	bool _loop = false;               // 是否循环播放
+	bool _enableHardwareDecode = true; // 是否尝试启用硬件解码/硬件变换（SourceReader/DXVA；失败自动回退）
+	bool _usingHardwareDecode = false; // 本次 InitSourceReader 是否以“允许DXVA+硬件变换(best-effort)”模式创建成功
+	bool _preferNv12VideoOutput = true; // 是否优先让 SourceReader 输出 NV12（关闭 MF video processing，降低 ReadSample 负担；失败回退 RGB）
+	bool _usingNv12VideoOutput = false; // 当前视频输出是否为 NV12
 	double _position = 0.0;           // 当前播放位置（秒）
 	double _duration = 0.0;           // 媒体总时长（秒）
 	std::atomic<double> _volume{ 1.0 }; // 音量 (0.0-1.0)
@@ -177,7 +182,8 @@ private:
 	ComPtr<IMFVideoDisplayControl> _videoDisplayControl;  // 视频显示控制
 	ComPtr<VideoSampleGrabberCallback> _videoSampleCallback;  // 视频帧回调
 	std::vector<uint8_t> _videoFrame;                 // 视频帧数据缓冲
-	UINT32 _videoStride = 0;                          // 视频帧步长
+	UINT32 _videoFrameStride = 0;                     // 当前 _videoFrame 的步长（用于 UI 上传；通常为 width*4）
+	UINT32 _videoStride = 0;                          // 解码输出 stride（来自 MF_MT_DEFAULT_STRIDE；NV12 时为 Y plane stride）
 	GUID _videoSubtype = GUID_NULL;                   // SourceReader 实际视频子类型
 	UINT32 _videoBytesPerPixel = 4;                   // 视频像素字节数（3=RGB24, 4=RGB32/ARGB32）
 	bool _videoBottomUp = false;                      // 是否为倒置图像（stride<0）
@@ -268,6 +274,7 @@ private:
 	HRESULT SetPlaybackRateImpl(float rate);          // 设置播放速率实现
 	void ReleaseResources();                          // 释放资源
 	void UpdateVideoBitmap();                         // 更新视频位图
+	void ReportPerfStatsIfDue();                      // 输出每秒性能统计（调试用）
 
 public:
 	// ========== 构造/析构 ==========
@@ -292,7 +299,7 @@ public:
 	/** @brief 播放位置变化时触发（秒）。 */
 	MediaPositionChangedEvent OnPositionChanged;
 
-	// ========== 重写基类方法 ==========
+	static void ConvertNV12ToBGRA(const uint8_t* nv12, size_t nv12Bytes, UINT32 nv12Stride, UINT32 srcW, UINT32 srcH, UINT32 cropX, UINT32 cropY, UINT32 w, UINT32 h, std::vector<uint8_t>& outBGRA);
 	virtual UIClass Type() override;
 	void Update() override;
 	bool ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof) override;
@@ -375,6 +382,24 @@ public:
 	GET(bool, Loop);
 	SET(bool, Loop);
 
+	// 是否尝试启用硬件解码/硬件变换（SourceReader/DXVA），可读写
+	PROPERTY(bool, EnableHardwareDecode);
+	GET(bool, EnableHardwareDecode);
+	SET(bool, EnableHardwareDecode);
+
+	// 当前是否处于“best-effort 硬件模式”（只读；仅表示 SourceReader 创建策略，最终是否真走硬解取决于系统解码器/驱动）
+	READONLY_PROPERTY(bool, UsingHardwareDecode);
+	GET(bool, UsingHardwareDecode);
+
+	// 是否优先使用 NV12 视频输出（可读写，best-effort；失败会回退 RGB）
+	PROPERTY(bool, PreferNv12VideoOutput);
+	GET(bool, PreferNv12VideoOutput);
+	SET(bool, PreferNv12VideoOutput);
+
+	// 当前是否正在使用 NV12 视频输出（只读）
+	READONLY_PROPERTY(bool, UsingNv12VideoOutput);
+	GET(bool, UsingNv12VideoOutput);
+
 	// 是否包含视频（只读）
 	PROPERTY(bool, HasVideo);
 	GET(bool, HasVideo);
@@ -395,5 +420,34 @@ public:
 	PROPERTY(VideoRenderMode, RenderMode);
 	GET(VideoRenderMode, RenderMode);
 	SET(VideoRenderMode, RenderMode);
+
+private:
+	// ========== 诊断：性能统计（每秒输出一次） ==========
+	std::atomic<UINT64> _statReadSampleCalls{ 0 };
+	std::atomic<UINT64> _statReadSampleQpcTicks{ 0 };
+	std::atomic<UINT64> _statReadSampleVideoCalls{ 0 };
+	std::atomic<UINT64> _statReadSampleVideoQpcTicks{ 0 };
+	std::atomic<UINT64> _statReadSampleAudioCalls{ 0 };
+	std::atomic<UINT64> _statReadSampleAudioQpcTicks{ 0 };
+	std::atomic<UINT64> _statSamplesToContigCalls{ 0 };
+	std::atomic<UINT64> _statSamplesToContigQpcTicks{ 0 };
+
+	std::atomic<UINT64> _statDecodedVideoFrames{ 0 };
+	std::atomic<UINT64> _statVideoConvertCalls{ 0 };
+	std::atomic<UINT64> _statVideoConvertQpcTicks{ 0 };
+	std::atomic<UINT64> _statVideoConvertBytes{ 0 };
+
+	std::atomic<UINT64> _statAudioWriteCalls{ 0 };
+	std::atomic<UINT64> _statAudioWriteQpcTicks{ 0 };
+	std::atomic<UINT64> _statAudioWriteBytes{ 0 };
+
+	std::atomic<UINT64> _statRenderUpdates{ 0 };
+	std::atomic<UINT64> _statVideoUploadCalls{ 0 };
+	std::atomic<UINT64> _statVideoUploadQpcTicks{ 0 };
+	std::atomic<UINT64> _statVideoUploadBytes{ 0 };
+	std::atomic<UINT64> _statDrawBitmapCalls{ 0 };
+	std::atomic<UINT64> _statDrawBitmapQpcTicks{ 0 };
+
+	std::atomic<LONGLONG> _statLastReportQpc{ 0 };
 };
 
