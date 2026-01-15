@@ -52,6 +52,139 @@ static void DebugOutputHr(const wchar_t* context, HRESULT hr)
 	OutputDebugStringW(buf);
 }
 
+static inline uint8_t Clip8(int v)
+{
+	return (uint8_t)((v < 0) ? 0 : (v > 255 ? 255 : v));
+}
+
+// NV12 (Y + interleaved UV) -> BGRA（CPU 后备路径）
+static void ConvertNV12ToBGRA(
+	const uint8_t* nv12,
+	size_t nv12Bytes,
+	UINT32 yStride,
+	UINT32 width,
+	UINT32 height,
+	UINT32 cropX,
+	UINT32 cropY,
+	UINT32 visibleW,
+	UINT32 visibleH,
+	std::vector<uint8_t>& outBgra)
+{
+	outBgra.clear();
+	if (!nv12 || yStride == 0 || width == 0 || height == 0 || visibleW == 0 || visibleH == 0) return;
+
+	// NV12 UV 采样为 2x2：crop 与可视尺寸需对齐到偶数。
+	const UINT32 cx = cropX & ~1u;
+	const UINT32 cy = cropY & ~1u;
+	UINT32 w = (visibleW & ~1u);
+	UINT32 h = (visibleH & ~1u);
+	if (cx >= width || cy >= height) return;
+	if (cy + h > height) h = (height - cy) & ~1u;
+	if (cx + w > width) w = (width - cx) & ~1u;
+	if (w == 0 || h == 0) return;
+
+	if (yStride <= cx) return;
+	UINT32 maxWByStride = (yStride - cx) & ~1u;
+	if (w > maxWByStride) w = maxWByStride;
+	if (w == 0) return;
+
+	const UINT32 uvStride = yStride;
+	if (uvStride <= cx) return;
+	UINT32 maxWByUvStride = (uvStride - cx) & ~1u;
+	if (w > maxWByUvStride) w = maxWByUvStride;
+	if (w == 0) return;
+
+	const UINT32 uvRows = (height + 1) / 2;
+	const size_t yBytes = (size_t)yStride * (size_t)height;
+	const size_t uvBytes = (size_t)uvStride * (size_t)uvRows;
+	if (yBytes > nv12Bytes) return;
+	if (uvBytes > (nv12Bytes - yBytes)) return;
+
+	const uint8_t* yPlane = nv12;
+	const uint8_t* uvPlane = nv12 + yBytes;
+
+	outBgra.resize((size_t)w * (size_t)h * 4);
+	for (UINT32 row = 0; row < h; row++)
+	{
+		const uint8_t* yRow = yPlane + (size_t)(cy + row) * (size_t)yStride + cx;
+		const uint8_t* uvRow = uvPlane + (size_t)((cy + row) / 2) * (size_t)uvStride + cx;
+		uint8_t* dst = outBgra.data() + (size_t)row * (size_t)w * 4;
+
+		for (UINT32 col = 0; col < w; col += 2)
+		{
+			const int U = (int)uvRow[col + 0] - 128;
+			const int V = (int)uvRow[col + 1] - 128;
+			const int c0 = (int)yRow[col + 0] - 16;
+			const int c1 = (int)yRow[col + 1] - 16;
+			const int C0 = (c0 < 0) ? 0 : c0;
+			const int C1 = (c1 < 0) ? 0 : c1;
+
+			const int rAdd = 409 * V;
+			const int gAdd = -100 * U - 208 * V;
+			const int bAdd = 516 * U;
+
+			int r = (298 * C0 + rAdd + 128) >> 8;
+			int g = (298 * C0 + gAdd + 128) >> 8;
+			int b = (298 * C0 + bAdd + 128) >> 8;
+			dst[(size_t)col * 4 + 0] = Clip8(b);
+			dst[(size_t)col * 4 + 1] = Clip8(g);
+			dst[(size_t)col * 4 + 2] = Clip8(r);
+			dst[(size_t)col * 4 + 3] = 0xFF;
+
+			r = (298 * C1 + rAdd + 128) >> 8;
+			g = (298 * C1 + gAdd + 128) >> 8;
+			b = (298 * C1 + bAdd + 128) >> 8;
+			dst[(size_t)(col + 1) * 4 + 0] = Clip8(b);
+			dst[(size_t)(col + 1) * 4 + 1] = Clip8(g);
+			dst[(size_t)(col + 1) * 4 + 2] = Clip8(r);
+			dst[(size_t)(col + 1) * 4 + 3] = 0xFF;
+		}
+	}
+}
+
+static bool GetAdapterLuidFromD3D11Device(ID3D11Device* dev, LUID& luid)
+{
+	if (!dev) return false;
+	ComPtr<IDXGIDevice> dxgiDev;
+	if (FAILED(dev->QueryInterface(IID_PPV_ARGS(&dxgiDev))) || !dxgiDev) return false;
+	ComPtr<IDXGIAdapter> adapter;
+	if (FAILED(dxgiDev->GetAdapter(&adapter)) || !adapter) return false;
+	DXGI_ADAPTER_DESC desc{};
+	if (FAILED(adapter->GetDesc(&desc))) return false;
+	luid = desc.AdapterLuid;
+	return true;
+}
+
+static bool GetAdapterLuidFromD2DDeviceContext(ID2D1DeviceContext* ctx, LUID& luid)
+{
+	if (!ctx) return false;
+	ComPtr<ID2D1Device> d2dDev;
+	ctx->GetDevice(&d2dDev);
+	if (!d2dDev) return false;
+	ComPtr<IDXGIDevice> dxgiDev;
+	if (FAILED(d2dDev->QueryInterface(IID_PPV_ARGS(&dxgiDev))) || !dxgiDev) return false;
+	ComPtr<IDXGIAdapter> adapter;
+	if (FAILED(dxgiDev->GetAdapter(&adapter)) || !adapter) return false;
+	DXGI_ADAPTER_DESC desc{};
+	if (FAILED(adapter->GetDesc(&desc))) return false;
+	luid = desc.AdapterLuid;
+	return true;
+}
+
+static bool IsD2DContextCompatibleWithTexture(ID2D1DeviceContext* d2dCtx, ID3D11Texture2D* tex)
+{
+	if (!d2dCtx || !tex) return false;
+	ComPtr<ID3D11Device> d3dDev;
+	tex->GetDevice(&d3dDev);
+	if (!d3dDev) return false;
+
+	LUID d2dLuid{};
+	LUID d3dLuid{};
+	if (!GetAdapterLuidFromD2DDeviceContext(d2dCtx, d2dLuid)) return false;
+	if (!GetAdapterLuidFromD3D11Device(d3dDev.Get(), d3dLuid)) return false;
+	return (d2dLuid.HighPart == d3dLuid.HighPart) && (d2dLuid.LowPart == d3dLuid.LowPart);
+}
+
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "evr.lib")
@@ -1020,29 +1153,49 @@ bool MediaPlayer::ConfigureSourceReaderVideoType()
 		VideoFormat preferredFormats[8];
 		int formatCount = 0;
 
-		const bool preferGpuYuv = (_useZeroCopy && _dxgiDeviceManager);
+		// 只有当零拷贝启用且具备 D3D11 VideoProcessor 能力时，才优先选择 YUV 输出。
+		// 否则优先 RGB32，避免后续 YUV->BGRA 转换失败（部分环境共享 D3D device 不支持 VIDEO_SUPPORT）。
+		const bool preferGpuYuv = (_useZeroCopy && _dxgiDeviceManager && _videoDevice && _videoContext);
 		if (!_videoProcessingEnabled)
 		{
-			DebugOutputHr(L"SourceReader: Video Processing disabled, strictly preferring Native/NV12", S_OK);
+			// video processing disabled 时，只有在我们具备 GPU YUV->BGRA 能力时才真正“偏好 NV12”。
+			// 否则优先输出 RGB32/ARGB32，避免后续零拷贝渲染把 NV12 surface 当 BGRA 使用。
+			const bool canGpuYuvToBgra = preferGpuYuv;
+			if (canGpuYuvToBgra)
+				DebugOutputHr(L"SourceReader: Video Processing disabled, preferring Native YUV (GPU convert)", S_OK);
+			else
+				DebugOutputHr(L"SourceReader: Video Processing disabled, GPU YUV convert unavailable; preferring RGB32", S_OK);
 			
 			GUID nativeSubtype = GUID_NULL;
 			if (SUCCEEDED(nativeType->GetGUID(MF_MT_SUBTYPE, &nativeSubtype)))
 			{
-				// 仅当 nativeSubtype 本身就是未压缩 YUV 时，才把它放进候选。
-				if (nativeSubtype == MFVideoFormat_NV12)
-					preferredFormats[formatCount++] = { MFVideoFormat_NV12, L"NV12" };
-				else if (nativeSubtype == MFVideoFormat_P010)
-					preferredFormats[formatCount++] = { MFVideoFormat_P010, L"P010" };
-				else if (nativeSubtype == MFVideoFormat_YUY2)
-					preferredFormats[formatCount++] = { MFVideoFormat_YUY2, L"YUY2" };
+				// 仅当 nativeSubtype 本身就是未压缩 YUV 且我们能在 GPU 上转 BGRA 时，才把它放进候选的最前面。
+				if (canGpuYuvToBgra)
+				{
+					if (nativeSubtype == MFVideoFormat_NV12)
+						preferredFormats[formatCount++] = { MFVideoFormat_NV12, L"NV12" };
+					else if (nativeSubtype == MFVideoFormat_P010)
+						preferredFormats[formatCount++] = { MFVideoFormat_P010, L"P010" };
+					else if (nativeSubtype == MFVideoFormat_YUY2)
+						preferredFormats[formatCount++] = { MFVideoFormat_YUY2, L"YUY2" };
+				}
 			}
-			// 确保 NV12 在列表里
+			// 若无法 GPU 转换，则优先 RGB32/ARGB32。
+			if (!canGpuYuvToBgra)
+			{
+				preferredFormats[formatCount++] = { MFVideoFormat_RGB32, L"RGB32" };
+				preferredFormats[formatCount++] = { MFVideoFormat_ARGB32, L"ARGB32" };
+			}
+			// 保留 YUV 作为备选（某些链路可能不支持 RGB 输出）。
 			preferredFormats[formatCount++] = { MFVideoFormat_NV12, L"NV12" };
 			preferredFormats[formatCount++] = { MFVideoFormat_P010, L"P010" };
 			preferredFormats[formatCount++] = { MFVideoFormat_YUY2, L"YUY2" };
-			// 兜底：某些机器即便关闭 video processing，也可能仍支持输出 RGB
-			preferredFormats[formatCount++] = { MFVideoFormat_RGB32, L"RGB32" };
-			preferredFormats[formatCount++] = { MFVideoFormat_ARGB32, L"ARGB32" };
+			// 若 canGpuYuvToBgra==true，则最后仍把 RGB 放进来作为兜底。
+			if (canGpuYuvToBgra)
+			{
+				preferredFormats[formatCount++] = { MFVideoFormat_RGB32, L"RGB32" };
+				preferredFormats[formatCount++] = { MFVideoFormat_ARGB32, L"ARGB32" };
+			}
 		}
 		else if (preferGpuYuv)
 		{
@@ -1054,7 +1207,7 @@ bool MediaPlayer::ConfigureSourceReaderVideoType()
 		}
 		else
 		{
-			// 非零拷贝场景下，优先 RGB32 以便 CPU/传统 D2D 路径直接显示
+			// 非零拷贝或无法进行 GPU YUV->BGRA 转换：优先 RGB32 以便直接显示
 			preferredFormats[formatCount++] = { MFVideoFormat_RGB32, L"RGB32" };
 			preferredFormats[formatCount++] = { MFVideoFormat_ARGB32, L"ARGB32" };
 			preferredFormats[formatCount++] = { MFVideoFormat_NV12, L"NV12" };
@@ -1257,6 +1410,7 @@ void MediaPlayer::UpdateVideoFormatFromSourceReader()
 				_videoSubtype = subtype;
 				_videoBytesPerPixel = bytesPerPixel;
 				_videoBottomUp = bottomUp;
+				_videoInputStride = stride;
 			}
 			
 			wchar_t dbgMsg[256];
@@ -1273,6 +1427,8 @@ void MediaPlayer::UpdateVideoFormatFromSourceReader()
 			_videoBottomUp = false;
 		}
 		
+		// 注意：_videoStride 用于 CPU 输出帧（BGRA）步长，会在写入 _videoFrame 时被设置为 w*4。
+		// 这里保存输入 stride 到 _videoInputStride，避免“第一帧后 stride 被输出值覆盖”导致后续帧解析失败。
 		_videoStride = stride;
 	}
 }
@@ -2024,62 +2180,95 @@ void MediaPlayer::PlaybackThreadMain()
 					UINT32 srcStride = 0;
 					UINT32 bpp = 4;
 					bool bottomUp = false;
+					GUID subtype = GUID_NULL;
 					{
 						std::scoped_lock lock(_videoFrameMutex);
-						srcStride = _videoStride;
+						srcStride = _videoInputStride;
 						bpp = (_videoBytesPerPixel == 0) ? 4 : _videoBytesPerPixel;
 						bottomUp = _videoBottomUp;
+						subtype = _videoSubtype;
 					}
 
-					const UINT32 minStride = (UINT32)frameW * bpp;
-					if (srcStride == 0) srcStride = minStride;
-					if (srcStride < minStride) srcStride = minStride;
-					const UINT32 needed = srcStride * (UINT32)frameH;
-					if (curLen >= needed)
+					// NV12：需要显式做 YUV->BGRA 转换（否则会把 NV12 当 32bpp memcpy，导致画面异常）。
+					if (subtype == MFVideoFormat_NV12)
 					{
 						std::vector<uint8_t> converted;
-						converted.resize((size_t)w * (size_t)h * 4);
-						const UINT32 cropWBytes = (UINT32)w * 4;
-						for (LONG row = 0; row < h; row++)
+						ConvertNV12ToBGRA(
+							p,
+							(size_t)curLen,
+							srcStride ? srcStride : (UINT32)frameW,
+							(UINT32)frameW,
+							(UINT32)frameH,
+							cropX,
+							cropY,
+							(UINT32)w,
+							(UINT32)h,
+							converted);
+						if (!converted.empty())
 						{
-							LONG rawRow = (LONG)cropY + row;
-							if (rawRow < 0 || rawRow >= frameH) break;
-							LONG srcRow = bottomUp ? (frameH - 1 - rawRow) : rawRow;
-							const BYTE* srcRowPtr = p + (size_t)srcRow * (size_t)srcStride + (size_t)cropX * (size_t)bpp;
-							uint8_t* dstRowPtr = converted.data() + (size_t)row * (size_t)w * 4;
-
-							if (bpp == 4)
 							{
-								memcpy(dstRowPtr, srcRowPtr, (size_t)cropWBytes);
+								std::scoped_lock lock(_videoFrameMutex);
+								_videoFrame = std::move(converted);
+								_videoStride = (UINT32)w * 4;
+								_videoFrameReady = true;
+								_videoFrameSampleTime = pts;
 							}
-							else if (bpp == 3)
+							this->PostRender();
+						}
+					}
+					else
+					{
+
+						const UINT32 minStride = (UINT32)frameW * bpp;
+						if (srcStride == 0) srcStride = minStride;
+						if (srcStride < minStride) srcStride = minStride;
+						const UINT32 needed = srcStride * (UINT32)frameH;
+						if (curLen >= needed)
+						{
+							std::vector<uint8_t> converted;
+							converted.resize((size_t)w * (size_t)h * 4);
+							const UINT32 cropWBytes = (UINT32)w * 4;
+							for (LONG row = 0; row < h; row++)
 							{
-								// MFVideoFormat_RGB24 在 Windows 上通常为 BGR24
-								for (LONG x = 0; x < w; x++)
+								LONG rawRow = (LONG)cropY + row;
+								if (rawRow < 0 || rawRow >= frameH) break;
+								LONG srcRow = bottomUp ? (frameH - 1 - rawRow) : rawRow;
+								const BYTE* srcRowPtr = p + (size_t)srcRow * (size_t)srcStride + (size_t)cropX * (size_t)bpp;
+								uint8_t* dstRowPtr = converted.data() + (size_t)row * (size_t)w * 4;
+
+								if (bpp == 4)
 								{
-									const BYTE* s = srcRowPtr + (size_t)x * 3;
-									uint8_t* d = dstRowPtr + (size_t)x * 4;
-									d[0] = s[0];
-									d[1] = s[1];
-									d[2] = s[2];
-									d[3] = 0xFF;
+									memcpy(dstRowPtr, srcRowPtr, (size_t)cropWBytes);
+								}
+								else if (bpp == 3)
+								{
+									// MFVideoFormat_RGB24 在 Windows 上通常为 BGR24
+									for (LONG x = 0; x < w; x++)
+									{
+										const BYTE* s = srcRowPtr + (size_t)x * 3;
+										uint8_t* d = dstRowPtr + (size_t)x * 4;
+										d[0] = s[0];
+										d[1] = s[1];
+										d[2] = s[2];
+										d[3] = 0xFF;
+									}
+								}
+								else
+								{
+									// Unknown: best effort treat as 32bpp.
+									memcpy(dstRowPtr, srcRowPtr, (size_t)cropWBytes);
 								}
 							}
-							else
-							{
-								// Unknown: best effort treat as 32bpp.
-								memcpy(dstRowPtr, srcRowPtr, (size_t)cropWBytes);
-							}
-						}
 
-						{
-							std::scoped_lock lock(_videoFrameMutex);
-							_videoFrame = std::move(converted);
-							_videoStride = (UINT32)w * 4;
-							_videoFrameReady = true;
-							_videoFrameSampleTime = pts;
+							{
+								std::scoped_lock lock(_videoFrameMutex);
+								_videoFrame = std::move(converted);
+								_videoStride = (UINT32)w * 4;
+								_videoFrameReady = true;
+								_videoFrameSampleTime = pts;
+							}
+							this->PostRender();
 						}
-						this->PostRender();
 					}
 				}
 			
@@ -2943,6 +3132,7 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 			std::scoped_lock lock(_videoFrameMutex);
 			_videoFrame.clear();
 			_videoFrameReady = false;
+			_videoInputStride = 0;
 			_videoStride = 0;
 			_videoSubtype = GUID_NULL;
 			_videoBytesPerPixel = 4;
@@ -2987,6 +3177,7 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 			std::scoped_lock lock(_videoFrameMutex);
 			_videoFrame.clear();
 			_videoFrameReady = false;
+			_videoInputStride = 0;
 			_videoStride = 0;
 			_videoSubtype = GUID_NULL;
 			_videoBytesPerPixel = 4;
@@ -3039,6 +3230,7 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 	{
 		std::scoped_lock lock(_videoFrameMutex);
 		_videoFrame.clear();
+		_videoInputStride = 0;
 		_videoStride = 0;
 		_videoFrameReady = false;
 	}
@@ -3405,6 +3597,7 @@ void MediaPlayer::ReleaseResources()
 	{
 		std::scoped_lock lock(_videoFrameMutex);
 		_videoFrame.clear();
+		_videoInputStride = 0;
 		_videoStride = 0;
 		_videoFrameReady = false;
 		_videoFrameSampleTime = (std::numeric_limits<LONGLONG>::min)();
@@ -3477,7 +3670,6 @@ void MediaPlayer::Update()
 			bmpMsAvg,
 			bmpMsTotal / elapsedSec);
 		OutputDebugStringW(buf);
-				_videoFrameSampleTime = (std::numeric_limits<LONGLONG>::min)();
 
 		_statLastReportQpc.store(now.QuadPart, std::memory_order_relaxed);
 	};
@@ -3552,144 +3744,125 @@ void MediaPlayer::Update()
 					}
 					else
 					{
-						static bool warnedOnce = false;
-						if (!warnedOnce)
-						{
-							DebugOutputHr(L"Zero-copy: YUV->BGRA conversion failed, falling back to CPU", E_FAIL);
-							warnedOnce = true;
-						}
+						// 无法在 GPU 上把 YUV 转为 BGRA：降级到 CPU 路径。
 						_useZeroCopy = false;
+						_d2dVideoBitmap.Reset();
+						_d2dVideoBitmapSourceTexture.Reset();
 					}
 				}
 			}
-			
-			auto rt = d2d->GetRenderTargetRaw();
-			if (rt)
+
+			// 如果本帧已经降级（例如 GPU YUV->BGRA 不可用），不要继续走 CreateBitmapFromDxgiSurface。
+			if (_useZeroCopy)
 			{
-				// 尝试获取 ID2D1DeviceContext 以支持 D3D11 互操作
-				ComPtr<ID2D1DeviceContext> d2dContext;
-				if (SUCCEEDED(rt->QueryInterface(__uuidof(ID2D1DeviceContext), (void**)&d2dContext)))
+				auto rt = d2d->GetRenderTargetRaw();
+				if (rt)
 				{
-					// 如果 D2D 位图不存在或源纹理变化，则创建共享位图
-					// 如果启用了 _recreateD2DBitmapEveryFrame，则强制每帧重建（兼容性）
-					if (_recreateD2DBitmapEveryFrame || !_d2dVideoBitmap || !_d2dVideoBitmapSourceTexture || _d2dVideoBitmapSourceTexture.Get() != textureForD2D.Get())
+					ComPtr<ID2D1DeviceContext> d2dContext;
+					if (SUCCEEDED(rt->QueryInterface(__uuidof(ID2D1DeviceContext), (void**)&d2dContext)) && d2dContext)
 					{
-						_d2dVideoBitmap.Reset();
-						_d2dVideoBitmapSourceTexture.Reset();
-						// 获取纹理的 DXGI Surface
-						ComPtr<IDXGISurface> dxgiSurface;
-						if (textureForD2D && SUCCEEDED(textureForD2D->QueryInterface(__uuidof(IDXGISurface), (void**)&dxgiSurface)))
+						if (!IsD2DContextCompatibleWithTexture(d2dContext.Get(), textureForD2D.Get()))
 						{
-							// 我们在这里保证传给 D2D 的一定是 BGRA 纹理。
-							DXGI_FORMAT d2dFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
-							D2D1_ALPHA_MODE alphaMode = D2D1_ALPHA_MODE_IGNORE;
-							
-							// 从 DXGI Surface 创建 D2D 位图（零拷贝！）
-							D2D1_BITMAP_PROPERTIES1 bitmapProperties = D2D1::BitmapProperties1(
-								D2D1_BITMAP_OPTIONS_NONE,
-								D2D1::PixelFormat(d2dFormat, alphaMode)
-							);
-							
-							LARGE_INTEGER __qpcBefore{};
-							const BOOL __hasBefore = QueryPerformanceCounter(&__qpcBefore);
-							HRESULT hr = d2dContext->CreateBitmapFromDxgiSurface(
-								dxgiSurface.Get(),
-								&bitmapProperties,
-								&_d2dVideoBitmap
-							);
-							LARGE_INTEGER __qpcAfter{};
-							if (__hasBefore && QueryPerformanceCounter(&__qpcAfter))
+							_useZeroCopy = false;
+							_d2dVideoBitmap.Reset();
+							_d2dVideoBitmapSourceTexture.Reset();
+						}
+
+						if (_useZeroCopy)
+						{
+							if (_recreateD2DBitmapEveryFrame || !_d2dVideoBitmap || !_d2dVideoBitmapSourceTexture || _d2dVideoBitmapSourceTexture.Get() != textureForD2D.Get())
 							{
-								_statCreateD2DBitmapCalls.fetch_add(1, std::memory_order_relaxed);
-								_statCreateD2DBitmapQpcTicks.fetch_add((UINT64)(__qpcAfter.QuadPart - __qpcBefore.QuadPart), std::memory_order_relaxed);
-							}
-							
-							if (FAILED(hr))
-							{
-								static bool warnedOnce = false;
-								if (!warnedOnce)
+								_d2dVideoBitmap.Reset();
+								_d2dVideoBitmapSourceTexture.Reset();
+								ComPtr<IDXGISurface> dxgiSurface;
+								if (textureForD2D && SUCCEEDED(textureForD2D->QueryInterface(__uuidof(IDXGISurface), (void**)&dxgiSurface)) && dxgiSurface)
 								{
-									DebugOutputHr(L"CreateBitmapFromDxgiSurface failed", hr);
-									warnedOnce = true;
+									D2D1_BITMAP_PROPERTIES1 bitmapProperties = D2D1::BitmapProperties1(
+										D2D1_BITMAP_OPTIONS_NONE,
+										D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+										96.0f,
+										96.0f);
+
+									LARGE_INTEGER __qpcBefore{};
+									const BOOL __hasBefore = QueryPerformanceCounter(&__qpcBefore);
+									HRESULT hr = d2dContext->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &bitmapProperties, &_d2dVideoBitmap);
+									LARGE_INTEGER __qpcAfter{};
+									if (__hasBefore && QueryPerformanceCounter(&__qpcAfter))
+									{
+										_statCreateD2DBitmapCalls.fetch_add(1, std::memory_order_relaxed);
+										_statCreateD2DBitmapQpcTicks.fetch_add((UINT64)(__qpcAfter.QuadPart - __qpcBefore.QuadPart), std::memory_order_relaxed);
+									}
+
+									if (FAILED(hr))
+									{
+										_useZeroCopy = false;
+										_d2dVideoBitmap.Reset();
+										_d2dVideoBitmapSourceTexture.Reset();
+									}
+									else
+									{
+										_d2dVideoBitmapSourceTexture = textureForD2D;
+									}
 								}
-								_useZeroCopy = false;  // 降级到CPU路径
 							}
-							else
+
+							if (_d2dVideoBitmap)
 							{
-								_d2dVideoBitmapSourceTexture = textureForD2D;
+								float destX = (float)abs.x;
+								float destY = (float)abs.y;
+								float destWidth = (float)size.cx;
+								float destHeight = (float)size.cy;
+
+								float videoWidth = (float)_videoSize.cx;
+								float videoHeight = (float)_videoSize.cy;
+
+								switch (_renderMode)
+								{
+								case VideoRenderMode::Fit:
+								{
+									float scaleX = destWidth / videoWidth;
+									float scaleY = destHeight / videoHeight;
+									float scale = (scaleX < scaleY) ? scaleX : scaleY;
+									float scaledWidth = videoWidth * scale;
+									float scaledHeight = videoHeight * scale;
+									destX += (destWidth - scaledWidth) * 0.5f;
+									destY += (destHeight - scaledHeight) * 0.5f;
+									destWidth = scaledWidth;
+									destHeight = scaledHeight;
+								}
+								break;
+								case VideoRenderMode::Fill:
+								case VideoRenderMode::UniformToFill:
+								{
+									float scaleX = destWidth / videoWidth;
+									float scaleY = destHeight / videoHeight;
+									float scale = (scaleX > scaleY) ? scaleX : scaleY;
+									float scaledWidth = videoWidth * scale;
+									float scaledHeight = videoHeight * scale;
+									destX += (destWidth - scaledWidth) * 0.5f;
+									destY += (destHeight - scaledHeight) * 0.5f;
+									destWidth = scaledWidth;
+									destHeight = scaledHeight;
+								}
+								break;
+								case VideoRenderMode::Center:
+								{
+									destX += (destWidth - videoWidth) * 0.5f;
+									destY += (destHeight - videoHeight) * 0.5f;
+									destWidth = videoWidth;
+									destHeight = videoHeight;
+								}
+								break;
+								case VideoRenderMode::Stretch:
+								default:
+									break;
+								}
+
+								D2D1_RECT_F destRect = D2D1::RectF(destX, destY, destX + destWidth, destY + destHeight);
+								d2dContext->DrawBitmap(_d2dVideoBitmap.Get(), destRect);
+								return;
 							}
 						}
-					}
-					
-					if (_d2dVideoBitmap)
-					{
-						// 计算渲染矩形
-						float destX = (float)abs.x;
-						float destY = (float)abs.y;
-						float destWidth = (float)size.cx;
-						float destHeight = (float)size.cy;
-						
-						float videoWidth = (float)_videoSize.cx;
-						float videoHeight = (float)_videoSize.cy;
-						
-						switch (_renderMode)
-						{
-						case VideoRenderMode::Fit:
-							{
-								float scaleX = destWidth / videoWidth;
-								float scaleY = destHeight / videoHeight;
-								float scale = (scaleX < scaleY) ? scaleX : scaleY;
-								float scaledWidth = videoWidth * scale;
-								float scaledHeight = videoHeight * scale;
-								destX += (destWidth - scaledWidth) * 0.5f;
-								destY += (destHeight - scaledHeight) * 0.5f;
-								destWidth = scaledWidth;
-								destHeight = scaledHeight;
-							}
-							break;
-						case VideoRenderMode::Fill:
-							{
-								float scaleX = destWidth / videoWidth;
-								float scaleY = destHeight / videoHeight;
-								float scale = (scaleX > scaleY) ? scaleX : scaleY;
-								float scaledWidth = videoWidth * scale;
-								float scaledHeight = videoHeight * scale;
-								destX += (destWidth - scaledWidth) * 0.5f;
-								destY += (destHeight - scaledHeight) * 0.5f;
-								destWidth = scaledWidth;
-								destHeight = scaledHeight;
-							}
-							break;
-						case VideoRenderMode::Center:
-							{
-								destX += (destWidth - videoWidth) * 0.5f;
-								destY += (destHeight - videoHeight) * 0.5f;
-								destWidth = videoWidth;
-								destHeight = videoHeight;
-							}
-							break;
-						case VideoRenderMode::UniformToFill:
-							{
-								float scaleX = destWidth / videoWidth;
-								float scaleY = destHeight / videoHeight;
-								float scale = (scaleX > scaleY) ? scaleX : scaleY;
-								float scaledWidth = videoWidth * scale;
-								float scaledHeight = videoHeight * scale;
-								destX += (destWidth - scaledWidth) * 0.5f;
-								destY += (destHeight - scaledHeight) * 0.5f;
-								destWidth = scaledWidth;
-								destHeight = scaledHeight;
-							}
-							break;
-						case VideoRenderMode::Stretch:
-						default:
-							break;
-						}
-						
-						// 零拷贝绘制：直接从GPU纹理渲染，无CPU内存拷贝！
-						D2D1_RECT_F destRect = D2D1::RectF(destX, destY, destX + destWidth, destY + destHeight);
-						d2dContext->DrawBitmap(_d2dVideoBitmap.Get(), destRect);
-						return;
 					}
 				}
 			}

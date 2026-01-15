@@ -236,6 +236,7 @@ private:
 	
 	// CPU后备路径（兼容性）
 	std::vector<uint8_t> _videoFrame;                 // 视频帧数据缓冲
+	UINT32 _videoInputStride = 0;                     // SourceReader 解码输出的输入stride（来自 MF_MT_DEFAULT_STRIDE；不要用输出stride覆盖）
 	UINT32 _videoStride = 0;                          // 视频帧步长
 	GUID _videoSubtype = GUID_NULL;                   // SourceReader 实际视频子类型
 	UINT32 _videoBytesPerPixel = 4;                   // 视频像素字节数（3=RGB24, 4=RGB32/ARGB32）
