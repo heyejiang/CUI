@@ -23,21 +23,25 @@ static void renderNodes(TreeView* tree, D2DGraphics1* d2d, float x, float y, flo
 			}
 			if (c->Children.Count > 0)
 			{
-				d2d->DrawRect(renderLeft, exTop, itemHeight * 0.6f, itemHeight * 0.6f, foreColor);
+				float triSize = itemHeight * 0.5f;
+				float triCenterX = renderLeft + triSize * 0.5f;
+				float triCenterY = exTop + triSize * 0.5f;
+				D2D1_TRIANGLE tri{};
 
-
-				d2d->DrawLine(
-					{ renderLeft + (itemHeight * 0.1f), exTop + (itemHeight * 0.3f) },
-					{ renderLeft + (itemHeight * 0.5f), exTop + (itemHeight * 0.3f) },
-					foreColor);
-				if (!c->Expand)
+				if (c->Expand)
 				{
-
-					d2d->DrawLine(
-						{ renderLeft + (itemHeight * 0.3f), exTop + (itemHeight * 0.1f) },
-						{ renderLeft + (itemHeight * 0.3f), exTop + (itemHeight * 0.5f) },
-						foreColor);
+					tri.point1 = D2D1::Point2F(triCenterX - triSize * 0.5f, triCenterY - triSize * 0.4f);
+					tri.point2 = D2D1::Point2F(triCenterX + triSize * 0.5f, triCenterY - triSize * 0.4f);
+					tri.point3 = D2D1::Point2F(triCenterX, triCenterY + triSize * 0.4f);
 				}
+				else
+				{
+					tri.point1 = D2D1::Point2F(triCenterX - triSize * 0.4f, triCenterY - triSize * 0.5f);
+					tri.point2 = D2D1::Point2F(triCenterX - triSize * 0.4f, triCenterY + triSize * 0.5f);
+					tri.point3 = D2D1::Point2F(triCenterX + triSize * 0.4f, triCenterY);
+				}
+
+				d2d->FillTriangle(tri, foreColor);
 
 				if (c->Image)
 				{
@@ -316,15 +320,25 @@ bool TreeView::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xo
 		}
 		else
 		{
-			auto font = this->Font;
-			auto abslocation = this->AbsLocation;
-			auto size = this->ActualSize();
-			int curr = 0;
-			bool isHit = false;
-			auto newHoveredNode = findNode(xof, yof, size.cx, size.cy, font->FontHeight, ScrollIndex, curr, 0, this->Root->Children, isHit);
-			bool needUpdate = this->HoveredNode == newHoveredNode;
-			this->HoveredNode = newHoveredNode;
-			if (needUpdate) this->PostRender();
+			if (xof < 0 || xof > this->Width || yof < 0 || yof > this->Height)
+			{
+				if (this->HoveredNode != nullptr)
+				{
+					this->HoveredNode = nullptr;
+					this->PostRender();
+				}
+			}
+			else
+			{
+				auto font = this->Font;
+				auto size = this->ActualSize();
+				int curr = 0;
+				bool isHit = false;
+				auto newHoveredNode = findNode(xof, yof, size.cx, size.cy, font->FontHeight, ScrollIndex, curr, 0, this->Root->Children, isHit);
+				bool needUpdate = this->HoveredNode == newHoveredNode;
+				this->HoveredNode = newHoveredNode;
+				if (needUpdate) this->PostRender();
+			}
 		}
 		MouseEventArgs event_obj = MouseEventArgs(MouseButtons::None, 0, xof, yof, HIWORD(wParam));
 		this->OnMouseMove(this, event_obj);
