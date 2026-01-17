@@ -613,6 +613,14 @@ SET_CPP(Control, SIZE, MaxSize)
 SIZE Control::MeasureCore(SIZE availableSize)
 {
 	SIZE desired = this->_size;
+	if (this->ParentForm)
+	{
+		SIZE actualSize = this->ActualSize();
+		if (actualSize.cx != desired.cx || actualSize.cy != desired.cy)
+		{
+			desired = actualSize;
+		}
+	}
 
 	// 应用 Padding
 	desired.cx += (LONG)(_padding.Left + _padding.Right);

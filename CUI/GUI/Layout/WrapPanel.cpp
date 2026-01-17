@@ -3,6 +3,26 @@
 #include <algorithm>
 #include <vector>
 
+namespace {
+	bool TryGetActualLayoutSize(Control* child, SIZE& outSize)
+	{
+		if (!child)
+		{
+			outSize = { 0, 0 };
+			return false;
+		}
+		SIZE baseSize = child->Size;
+		if (!child->ParentForm)
+		{
+			outSize = baseSize;
+			return false;
+		}
+		SIZE actualSize = child->ActualSize();
+		outSize = actualSize;
+		return actualSize.cx != baseSize.cx || actualSize.cy != baseSize.cy;
+	}
+}
+
 // WrapLayoutEngine 实现
 
 SIZE WrapLayoutEngine::Measure(Control* container, SIZE availableSize)
@@ -132,10 +152,12 @@ void WrapLayoutEngine::Arrange(Control* container, D2D1_RECT_F finalRect)
 			if (!child || !child->Visible) continue;
 			
 			SIZE childSize = child->Size;
+			SIZE actualSize = childSize;
+			bool useActualSize = TryGetActualLayoutSize(child, actualSize);
 			Thickness margin = child->Margin;
 			
-			float itemWidth = _itemWidth > 0 ? _itemWidth : (float)childSize.cx;
-			float itemHeight = _itemHeight > 0 ? _itemHeight : (float)childSize.cy;
+			float itemWidth = _itemWidth > 0 ? _itemWidth : (float)(useActualSize ? actualSize.cx : childSize.cx);
+			float itemHeight = _itemHeight > 0 ? _itemHeight : (float)(useActualSize ? actualSize.cy : childSize.cy);
 			float totalItemWidth = itemWidth + margin.Left + margin.Right;
 			float totalItemHeight = itemHeight + margin.Top + margin.Bottom;
 			
@@ -170,10 +192,12 @@ void WrapLayoutEngine::Arrange(Control* container, D2D1_RECT_F finalRect)
 			if (!child || !child->Visible) continue;
 			
 			SIZE childSize = child->Size;
+			SIZE actualSize = childSize;
+			bool useActualSize = TryGetActualLayoutSize(child, actualSize);
 			Thickness margin = child->Margin;
 			
-			float itemWidth = _itemWidth > 0 ? _itemWidth : (float)childSize.cx;
-			float itemHeight = _itemHeight > 0 ? _itemHeight : (float)childSize.cy;
+			float itemWidth = _itemWidth > 0 ? _itemWidth : (float)(useActualSize ? actualSize.cx : childSize.cx);
+			float itemHeight = _itemHeight > 0 ? _itemHeight : (float)(useActualSize ? actualSize.cy : childSize.cy);
 			float totalItemWidth = itemWidth + margin.Left + margin.Right;
 			float totalItemHeight = itemHeight + margin.Top + margin.Bottom;
 			

@@ -3,6 +3,26 @@
 #include <algorithm>
 #include <set>
 
+namespace {
+	bool TryGetActualLayoutSize(Control* child, SIZE& outSize)
+	{
+		if (!child)
+		{
+			outSize = { 0, 0 };
+			return false;
+		}
+		SIZE baseSize = child->Size;
+		if (!child->ParentForm)
+		{
+			outSize = baseSize;
+			return false;
+		}
+		SIZE actualSize = child->ActualSize();
+		outSize = actualSize;
+		return actualSize.cx != baseSize.cx || actualSize.cy != baseSize.cy;
+	}
+}
+
 // RelativeLayoutEngine 实现
 
 bool RelativeLayoutEngine::HasCycle(Control* start, Control* current, std::map<Control*, int>& visited)
@@ -139,7 +159,13 @@ void RelativeLayoutEngine::Arrange(Control* container, D2D1_RECT_F finalRect)
 		if (!child) continue;
 		
 		SIZE childSize = child->Size;
+		SIZE actualSize = childSize;
+		bool useActualSize = TryGetActualLayoutSize(child, actualSize);
 		Thickness margin = child->Margin;
+		if (useActualSize)
+		{
+			childSize = actualSize;
+		}
 		
 		float left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
 		bool leftSet = false, topSet = false, rightSet = false, bottomSet = false;

@@ -4,6 +4,26 @@
 #include <cfloat>
 #include <cmath>
 
+namespace {
+	bool TryGetActualLayoutSize(Control* child, SIZE& outSize)
+	{
+		if (!child)
+		{
+			outSize = { 0, 0 };
+			return false;
+		}
+		SIZE baseSize = child->Size;
+		if (!child->ParentForm)
+		{
+			outSize = baseSize;
+			return false;
+		}
+		SIZE actualSize = child->ActualSize();
+		outSize = actualSize;
+		return actualSize.cx != baseSize.cx || actualSize.cy != baseSize.cy;
+	}
+}
+
 // GridLayoutEngine 实现
 
 void GridLayoutEngine::CalculateColumnWidths(Control* container, float availableWidth)
@@ -351,8 +371,15 @@ void GridLayoutEngine::Arrange(Control* container, D2D1_RECT_F finalRect)
 		VerticalAlignment vAlign = child->VAlign;
 		
 		SIZE childSize = child->Size;
+		SIZE actualSize = childSize;
+		bool useActualSize = TryGetActualLayoutSize(child, actualSize);
 		float finalWidth = (float)childSize.cx;
 		float finalHeight = (float)childSize.cy;
+		if (useActualSize)
+		{
+			finalWidth = (float)actualSize.cx;
+			finalHeight = (float)actualSize.cy;
+		}
 		
 		// 水平对齐
 		if (hAlign == HorizontalAlignment::Stretch)
