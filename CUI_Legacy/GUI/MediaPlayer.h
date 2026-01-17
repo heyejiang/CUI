@@ -156,6 +156,8 @@ private:
 	// ========== 播放状态 ==========
 	PlayState _playState = PlayState::Stopped;
 	std::wstring _mediaFile;          // 当前加载的媒体文件路径
+	ComPtr<IStream> _memoryStream;    // 内存媒体的 IStream（用于 MFCreateSourceReaderFromByteStream）
+	ComPtr<IMFByteStream> _memoryByteStream; // 内存媒体字节流
 	bool _autoPlay = true;            // 是否自动播放
 	bool _loop = false;               // 是否循环播放
 	bool _enableHardwareDecode = true; // 是否尝试启用硬件解码/硬件变换（SourceReader/DXVA；失败自动回退）
@@ -239,6 +241,7 @@ private:
 
 	// ========== SourceReader/WASAPI 内部方法 ==========
 	bool InitSourceReader(const std::wstring& url);   // 初始化SourceReader
+	bool InitSourceReaderFromByteStream(IMFByteStream* byteStream); // 从字节流初始化SourceReader
 	void ShutdownSourceReader();                      // 关闭SourceReader
 	bool InitWasapi();                                // 初始化WASAPI音频输出
 	void ShutdownWasapi();                            // 关闭WASAPI
@@ -312,6 +315,15 @@ public:
 	/// <param name="mediaFile">媒体文件路径</param>
 	/// <returns>加载成功返回true，否则返回false</returns>
 	bool Load(const std::wstring& mediaFile);
+
+	/// <summary>
+	/// 从内存加载媒体
+	/// </summary>
+	/// <param name="data">媒体数据指针</param>
+	/// <param name="size">媒体数据大小</param>
+	/// <param name="nameHint">用于识别格式的名称/扩展名提示（可为空）</param>
+	/// <returns>加载成功返回true，否则返回false</returns>
+	bool Load(const void* data, size_t size, const std::wstring& nameHint = L"memory");
 	
 	/// <summary>
 	/// 播放媒体（如果当前处于暂停状态，则继续播放）

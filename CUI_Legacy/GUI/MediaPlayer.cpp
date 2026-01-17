@@ -1337,9 +1337,132 @@ bool MediaPlayer::InitSourceReader(const std::wstring& url)
 	return true;
 }
 
+bool MediaPlayer::InitSourceReaderFromByteStream(IMFByteStream* byteStream)
+{
+	ShutdownSourceReader();
+	if (!byteStream) return false;
+	_memoryByteStream = byteStream;
+
+	HRESULT hr = S_OK;
+	_usingHardwareDecode = false;
+	_usingNv12VideoOutput = false;
+
+	// 第一阶段：尽量启用硬件变换/硬解（最佳努力），保持与 URL 路径一致的策略。
+	if (_enableHardwareDecode)
+	{
+		ComPtr<IMFAttributes> attr;
+		hr = MFCreateAttributes(&attr, 10);
+		if (FAILED(hr)) { DebugOutputHr(L"SourceReader: MFCreateAttributes(HW, mem)", hr); return false; }
+
+		(void)attr->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+		(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, _preferNv12VideoOutput ? FALSE : TRUE);
+
+		hr = MFCreateSourceReaderFromByteStream(_memoryByteStream.Get(), attr.Get(), &_sourceReader);
+		if (FAILED(hr) && hr == E_INVALIDARG)
+		{
+			DebugOutputHr(L"SourceReader: HW init got E_INVALIDARG (mem), retry without HW_TRANSFORMS", hr);
+			attr.Reset();
+			if (SUCCEEDED(MFCreateAttributes(&attr, 8)))
+			{
+				(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, _preferNv12VideoOutput ? FALSE : TRUE);
+				hr = MFCreateSourceReaderFromByteStream(_memoryByteStream.Get(), attr.Get(), &_sourceReader);
+			}
+		}
+		if (SUCCEEDED(hr) && _sourceReader)
+		{
+			_usingHardwareDecode = true;
+			DebugOutputHr(L"SourceReader: HW transforms/DXVA mode (mem, best-effort)", S_OK);
+		}
+	}
+
+	// 失败回退：强制软解
+	if (!_sourceReader)
+	{
+		ComPtr<IMFAttributes> attr;
+		hr = MFCreateAttributes(&attr, 8);
+		if (FAILED(hr)) { DebugOutputHr(L"SourceReader: MFCreateAttributes(SW, mem)", hr); return false; }
+		(void)attr->SetUINT32(MF_SOURCE_READER_DISABLE_DXVA, TRUE);
+		(void)attr->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, FALSE);
+		(void)attr->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+
+		hr = MFCreateSourceReaderFromByteStream(_memoryByteStream.Get(), attr.Get(), &_sourceReader);
+		if (FAILED(hr))
+		{
+			DebugOutputHr(L"SourceReader: MFCreateSourceReaderFromByteStream failed (final)", hr);
+			_lastMfError = hr;
+			return false;
+		}
+		DebugOutputHr(L"SourceReader: SW decode mode (mem)", S_OK);
+	}
+
+	// Ensure streams are selected.
+	(void)_sourceReader->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE);
+	(void)_sourceReader->SetStreamSelection(_srVideoStream, TRUE);
+	(void)_sourceReader->SetStreamSelection(_srAudioStream, TRUE);
+
+	if (!ConfigureSourceReaderVideoType())
+	{
+		// Some files are audio-only.
+		_hasVideo = false;
+	}
+	else
+	{
+		_hasVideo = true;
+		UpdateVideoFormatFromSourceReader();
+	}
+
+	if (InitWasapi() && ConfigureSourceReaderAudioTypeFromMixFormat())
+	{
+		_hasAudio = true;
+	}
+	else
+	{
+		_hasAudio = false;
+	}
+
+	// Find actual stream indices
+	_actualVideoStreamIndex = (DWORD)-1;
+	_actualAudioStreamIndex = (DWORD)-1;
+	for (DWORD i = 0; ; i++)
+	{
+		ComPtr<IMFMediaType> mt;
+		HRESULT hr = _sourceReader->GetCurrentMediaType(i, &mt);
+		if (FAILED(hr)) break;
+
+		BOOL selected = FALSE;
+		if (SUCCEEDED(_sourceReader->GetStreamSelection(i, &selected)) && selected)
+		{
+			GUID majorType;
+			if (SUCCEEDED(mt->GetMajorType(&majorType)))
+			{
+				if (majorType == MFMediaType_Video && _actualVideoStreamIndex == (DWORD)-1)
+					_actualVideoStreamIndex = i;
+				else if (majorType == MFMediaType_Audio && _actualAudioStreamIndex == (DWORD)-1)
+					_actualAudioStreamIndex = i;
+			}
+		}
+	}
+
+	// Duration
+	PROPVARIANT var;
+	PropVariantInit(&var);
+	if (SUCCEEDED(_sourceReader->GetPresentationAttribute(MF_SOURCE_READER_MEDIASOURCE, MF_PD_DURATION, &var)))
+	{
+		if (var.vt == VT_UI8)
+			_duration = (double)var.uhVal.QuadPart / HNS_PER_SEC;
+		else if (var.vt == VT_I8)
+			_duration = (double)var.hVal.QuadPart / HNS_PER_SEC;
+	}
+	PropVariantClear(&var);
+
+	return true;
+}
+
 void MediaPlayer::ShutdownSourceReader()
 {
 	_sourceReader.Reset();
+	_memoryByteStream.Reset();
+	_memoryStream.Reset();
 }
 
 void MediaPlayer::StopSourceReaderPlayback(bool shutdown)
@@ -2187,6 +2310,8 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 			_videoCropX = 0;
 			_videoCropY = 0;
 		}
+		_memoryByteStream.Reset();
+		_memoryStream.Reset();
 		if (_videoBitmap && _ownsVideoBitmap)
 			_videoBitmap->Release();
 		_videoBitmap = nullptr;
@@ -2296,6 +2421,104 @@ bool MediaPlayer::Load(const std::wstring& mediaFile)
 		}
 	}
 
+	return true;
+}
+
+bool MediaPlayer::Load(const void* data, size_t size, const std::wstring& nameHint)
+{
+	if (!_initialized) return false;
+	if (!this->ParentForm) return false;
+	if (!data || size == 0) return false;
+
+	// 强制使用 SourceReader 路径（内存流仅支持 SourceReader）
+	_useSourceReader = true;
+
+	// 若之前在 SourceReader 后端播放，先彻底停掉线程/音频
+	if (_playThread.joinable() || _threadPlaying.load() || _sourceReader)
+	{
+		StopSourceReaderPlayback(true);
+	}
+
+	_mediaFile = nameHint;
+	_mediaLoaded = false;
+	_position = 0.0;
+	_duration = 0.0;
+	_hasVideo = false;
+	_hasAudio = false;
+	_videoSize = SIZE{ 0,0 };
+	{
+		std::scoped_lock lock(_videoFrameMutex);
+		_videoFrame.clear();
+		_videoFrameReady = false;
+		_videoFrameStride = 0;
+		_videoStride = 0;
+		_videoSubtype = GUID_NULL;
+		_videoBytesPerPixel = 4;
+		_videoBottomUp = false;
+		_videoFrameSize = SIZE{ 0,0 };
+		_videoCropX = 0;
+		_videoCropY = 0;
+	}
+	if (_videoBitmap && _ownsVideoBitmap)
+		_videoBitmap->Release();
+	_videoBitmap = nullptr;
+	_ownsVideoBitmap = false;
+	_memoryByteStream.Reset();
+	_memoryStream.Reset();
+
+	// 构建内存 IStream
+	HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+	if (!hMem) return false;
+	void* pMem = GlobalLock(hMem);
+	if (!pMem)
+	{
+		GlobalFree(hMem);
+		return false;
+	}
+	memcpy(pMem, data, size);
+	GlobalUnlock(hMem);
+
+	ComPtr<IStream> memStream;
+	HRESULT hr = CreateStreamOnHGlobal(hMem, TRUE, &memStream);
+	if (FAILED(hr) || !memStream)
+	{
+		GlobalFree(hMem);
+		DebugOutputHr(L"CreateStreamOnHGlobal failed", hr);
+		return false;
+	}
+
+	ComPtr<IMFByteStream> byteStream;
+	hr = MFCreateMFByteStreamOnStream(memStream.Get(), &byteStream);
+	if (FAILED(hr) || !byteStream)
+	{
+		DebugOutputHr(L"MFCreateMFByteStreamOnStream failed", hr);
+		return false;
+	}
+
+	// 设置名称提示，帮助识别格式（如 .mp4）
+	ComPtr<IMFAttributes> bsAttr;
+	if (!nameHint.empty() && SUCCEEDED(byteStream.As(&bsAttr)) && bsAttr)
+	{
+		(void)bsAttr->SetString(MF_BYTESTREAM_ORIGIN_NAME, nameHint.c_str());
+	}
+
+	_memoryStream = memStream;
+	_memoryByteStream = byteStream;
+
+	if (!InitSourceReaderFromByteStream(byteStream.Get()))
+	{
+		_mediaLoaded = false;
+		OnMediaFailed(this);
+		return false;
+	}
+
+	_mediaLoaded = true;
+	_playState = PlayState::Stopped;
+	OnMediaOpened(this);
+	this->PostRender();
+
+	if (_autoPlay)
+		Play();
 	return true;
 }
 
@@ -2823,7 +3046,7 @@ void MediaPlayer::ReportPerfStatsIfDue()
 	wchar_t buf[512] = {};
 	swprintf_s(
 		buf,
-		L"[MediaPlayer][Legacy][%.2fs] mode=%s nv12=%s upd=%llu fps=%.1f | ReadSample %llux %.3fms (V:%llux %.3fms A:%llux %.3fms) | Contig %llux %.3fms | VConv %llux %.3fms %.1fMB/s | Upload %llux %.3fms %.1fMB/s | Draw %llux %.3fms | Audio %llux %.3fms %.1fMB/s\n",
+		L"[MediaPlayer][%.2fs] mode=%s nv12=%s upd=%llu fps=%.1f | ReadSample %llux %.3fms (V:%llux %.3fms A:%llux %.3fms) | Contig %llux %.3fms | VConv %llux %.3fms %.1fMB/s | Upload %llux %.3fms %.1fMB/s | Draw %llux %.3fms | Audio %llux %.3fms %.1fMB/s\n",
 		intervalSec,
 		(_usingHardwareDecode ? L"HW" : L"SW"),
 		(_usingNv12VideoOutput ? L"Y" : L"N"),

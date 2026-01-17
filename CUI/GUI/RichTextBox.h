@@ -63,7 +63,7 @@ public:
 	/** @brief 是否允许输入 Tab 字符。 */
 	bool AllowTabInput = false;
 	/** @brief 最大文本长度（超出会被截断）。 */
-	size_t MaxTextLength = 1000000;
+	size_t MaxTextLength = 0;
 	/** @brief 是否启用虚拟化（用于长文本）。 */
 	bool EnableVirtualization = true;
 	/** @brief 超过该字符数时进入虚拟化模式。 */

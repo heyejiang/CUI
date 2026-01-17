@@ -60,6 +60,9 @@
     <ClCompile Include="StatusBarPartsEditorDialog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="FakeWebBrowser.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CodeGenerator.h">
@@ -104,8 +107,8 @@
     <ClInclude Include="StatusBarPartsEditorDialog.h">
       <Filter>头文件</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
+    <ClInclude Include="FakeWebBrowser.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
