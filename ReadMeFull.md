@@ -1830,17 +1830,3 @@ namespace Colors {
     ColorF Success;
 }
 ```
-
-### D. 版本历史
-
-| 版本 | 日期 | 主要变更 |
-|-----|------|---------|
-| v1.0 | 2024-XX-XX | 初始发布 |
-| v1.1 | 2024-XX-XX | 新增 WebView2 集成 |
-| v1.2 | 2024-XX-XX | 新增 MediaPlayer 控件 |
-
----
-
-**文档更新时间**: 2024年
-
-**CUI 项目**: https://github.com/your-repo/cui
