@@ -1,6 +1,8 @@
 # CUI - Modern Windows GUI Framework
 
-[English](README.en.md) | [简体中文](README.md)
+[English](README.en.md) | [简体中文](README.md) | [Full Documentation](ReadMeFull.md)
+
+[完整文档(中文)](ReadMeFull.md)
 
 CUI is a modern native Windows GUI framework based on **Direct2D** and **DirectComposition** (C++20). It also comes with a **visual designer** (drag & drop, JSON save/load, and automatic C++ code generation).
 

@@ -1,6 +1,8 @@
 # CUI - 现代化 Windows GUI 框架
 
-[简体中文](README.md) | [English](README.en.md)
+[简体中文](README.md) | [English](README.en.md) | [完整文档](ReadMeFull.md)
+
+[完整文档(英文)](ReadMeFull.en.md)
 
 一个基于 **Direct2D** 和 **DirectComposition** 的 Windows 原生 GUI 框架（C++20），并提供配套的 **可视化设计器**（拖放设计 + JSON 保存/加载 + 自动生成 C++ 代码）。
 
