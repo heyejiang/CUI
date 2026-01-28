@@ -43,8 +43,8 @@ private:
     void BuildTab_Media(TabPage* page);
 
 private:
-    ID2D1Bitmap* _bmps[10]{};
-    ID2D1Bitmap* _icons[5]{};
+    std::shared_ptr<BitmapSource> _bmps[10]{};
+    std::shared_ptr<BitmapSource> _icons[5]{};
 
     Menu* _menu = nullptr;
     ToolBar* _toolbar = nullptr;

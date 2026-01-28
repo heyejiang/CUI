@@ -15,7 +15,6 @@ Control::Control()
 	Parent(nullptr),
 	Tag(NULL),
 	SizeMode(ImageSizeMode::Zoom),
-	_image(NULL),
 	_text(L"")
 {
 	this->_layoutBaseLocation = this->_location;
@@ -24,12 +23,9 @@ Control::Control()
 }
 Control::~Control()
 {
-	if (this->_image && this->_ownsImage)
-	{
-		this->_image->Release();
-	}
-	this->_image = NULL;
-	this->_ownsImage = false;
+	this->_imageCache.Reset();
+	this->_imageCacheTarget = nullptr;
+	this->_imageSource.reset();
 	if (this->_font && this->_ownsFont)
 	{
 		delete this->_font;
@@ -309,29 +305,41 @@ SET_CPP(Control, D2D1_COLOR_F, ForeColor)
 	_forecolor = value;
 	this->PostRender();
 }
-GET_CPP(Control, ID2D1Bitmap*, Image)
+GET_CPP(Control, std::shared_ptr<BitmapSource>, Image)
 {
-	return _image;
+	return _imageSource;
 }
-SET_CPP(Control, ID2D1Bitmap*, Image)
+SET_CPP(Control, std::shared_ptr<BitmapSource>, Image)
 {
-	this->SetImageEx(value, true);
+	this->SetImageEx(std::move(value));
 }
 
-void Control::SetImageEx(ID2D1Bitmap* value, bool takeOwnership)
+void Control::SetImageEx(std::shared_ptr<BitmapSource> value)
 {
-	if (value == this->_image)
-	{
-		this->_ownsImage = takeOwnership;
+	if (value == this->_imageSource)
 		return;
-	}
-	if (this->_image && this->_ownsImage)
-	{
-		this->_image->Release();
-	}
-	this->_image = value;
-	this->_ownsImage = takeOwnership;
+	this->_imageSource = std::move(value);
+	this->_imageCache.Reset();
+	this->_imageCacheTarget = nullptr;
 	this->PostRender();
+}
+
+ID2D1Bitmap* Control::EnsureImageCache()
+{
+	if (!this->_imageSource || !this->ParentForm || !this->ParentForm->Render)
+		return nullptr;
+	auto* target = this->ParentForm->Render->GetRenderTargetRaw();
+	if (!target)
+		return nullptr;
+	if (this->_imageCache && this->_imageCacheTarget == target)
+		return this->_imageCache.Get();
+	this->_imageCache.Reset();
+	this->_imageCacheTarget = target;
+	auto* bmp = this->ParentForm->Render->CreateBitmap(this->_imageSource);
+	if (!bmp)
+		return nullptr;
+	this->_imageCache.Attach(bmp);
+	return this->_imageCache.Get();
 }
 
 void Control::OnRenderTargetRecreated()
@@ -343,18 +351,17 @@ void Control::OnRenderTargetRecreated()
 		if (c) c->OnRenderTargetRecreated();
 	}
 
-	// 清空 Image：不强行接管外部资源，避免误 Release；但能防止继续绘制失效 bitmap。
-	if (this->_image)
-	{
-		this->SetImageEx(nullptr, false);
-	}
+	// 清空缓存的 bitmap（保留 BitmapSource 以便重建）。
+	this->_imageCache.Reset();
+	this->_imageCacheTarget = nullptr;
 }
 void Control::RenderImage()
 {
-	if (this->_image)
+	auto* bmp = this->EnsureImageCache();
+	if (bmp)
 	{
 		auto absLocation = this->AbsLocation;
-		auto size = this->_image->GetSize();
+		auto size = bmp->GetSize();
 		if (size.width > 0 && size.height > 0)
 		{
 			auto asize = this->ActualSize();
@@ -362,17 +369,17 @@ void Control::RenderImage()
 			{
 			case ImageSizeMode::Normal:
 			{
-				this->ParentForm->Render->DrawBitmap(this->_image, (float)absLocation.x, (float)absLocation.y, size.width, size.height);
+				this->ParentForm->Render->DrawBitmap(bmp, (float)absLocation.x, (float)absLocation.y, size.width, size.height);
 			}
 			break;
 			case ImageSizeMode::CenterImage:
 			{
-				this->ParentForm->Render->DrawBitmap(this->_image, absLocation.x + ((asize.cx - size.width) / 2.0f), absLocation.y + ((asize.cy - size.height) / 2.0f), size.width, size.height);
+				this->ParentForm->Render->DrawBitmap(bmp, absLocation.x + ((asize.cx - size.width) / 2.0f), absLocation.y + ((asize.cy - size.height) / 2.0f), size.width, size.height);
 			}
 			break;
 			case ImageSizeMode::StretchIamge:
 			{
-				this->ParentForm->Render->DrawBitmap(this->_image, (float)absLocation.x, (float)absLocation.y, (float)asize.cx, (float)asize.cy);
+				this->ParentForm->Render->DrawBitmap(bmp, (float)absLocation.x, (float)absLocation.y, (float)asize.cx, (float)asize.cy);
 			}
 			break;
 			case ImageSizeMode::Zoom:
@@ -381,7 +388,7 @@ void Control::RenderImage()
 				float tp = xp < yp ? xp : yp;
 				float tw = size.width * tp, th = size.height * tp;
 				float xf = (asize.cx - tw) / 2.0f, yf = (asize.cy - th) / 2.0f;
-				this->ParentForm->Render->DrawBitmap(this->_image, absLocation.x + xf, absLocation.y + yf, tw, th);
+				this->ParentForm->Render->DrawBitmap(bmp, absLocation.x + xf, absLocation.y + yf, tw, th);
 			}
 			break;
 			default:

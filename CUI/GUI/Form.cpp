@@ -742,6 +742,20 @@ SET_CPP(Form, std::wstring, Text) {
 	this->ControlChanged = true;
 }
 
+GET_CPP(Form, std::shared_ptr<BitmapSource>, Image)
+{
+	return _imageSource;
+}
+
+SET_CPP(Form, std::shared_ptr<BitmapSource>, Image)
+{
+	if (value == _imageSource)
+		return;
+	_imageSource = std::move(value);
+	ResetImageCache();
+	this->ControlChanged = true;
+}
+
 class Font* Form::GetFont()
 {
 	if (this->_font)
@@ -926,6 +940,7 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 		Render = new HwndGraphics1(this->Handle);
 		OverlayRender = nullptr;
 	}
+	ResetImageCache();
 	ClearCaptionStates();
 	// 注意：不要在构造阶段仅缩放字体/标题栏，否则会导致“画面变大但窗口/命中区域不一致”。
 	// 初始 DPI 缩放统一放到 Show()/ShowDialog() 之前执行（见 EnsureInitialDpiApplied）。
@@ -998,11 +1013,8 @@ void Form::CleanupResources()
 	this->MainMenu = nullptr;
 	this->MainStatusBar = nullptr;
 
-	if (this->Image)
-	{
-		this->Image->Release();
-		this->Image = nullptr;
-	}
+	this->_imageSource.reset();
+	ResetImageCache();
 
 	if (this->_font && this->_ownsFont)
 	{
@@ -1197,6 +1209,30 @@ void Form::EnsureDropTargetRegistered()
 		_dropRegistered = true;
 		DragAcceptFiles(this->Handle, FALSE);
 	}
+}
+
+ID2D1Bitmap* Form::EnsureImageCache()
+{
+	if (!_imageSource || !this->Render)
+		return nullptr;
+	auto* target = this->Render->GetRenderTargetRaw();
+	if (!target)
+		return nullptr;
+	if (_imageCache && _imageCacheTarget == target)
+		return _imageCache.Get();
+	_imageCache.Reset();
+	_imageCacheTarget = target;
+	auto* bmp = this->Render->CreateBitmap(_imageSource);
+	if (!bmp)
+		return nullptr;
+	_imageCache.Attach(bmp);
+	return _imageCache.Get();
+}
+
+void Form::ResetImageCache()
+{
+	_imageCache.Reset();
+	_imageCacheTarget = nullptr;
 }
 
 IDCompositionDevice* Form::GetDCompDevice() const
@@ -2217,9 +2253,10 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 }
 void Form::RenderImage()
 {
-	if (this->Image)
+	auto* bmp = EnsureImageCache();
+	if (bmp)
 	{
-		auto size = this->Image->GetSize();
+		auto size = bmp->GetSize();
 		if (size.width > 0 && size.height > 0)
 		{
 			// 自绘标题栏属于 client 区域的一部分：背景图应铺满整个窗口区域（0..Size）
@@ -2228,19 +2265,19 @@ void Form::RenderImage()
 			{
 			case ImageSizeMode::Normal:
 			{
-				this->Render->DrawBitmap(this->Image, 0, 0, size.width, size.height);
+				this->Render->DrawBitmap(bmp, 0, 0, size.width, size.height);
 			}
 			break;
 			case ImageSizeMode::CenterImage:
 			{
 				float xf = (asize.cx - size.width) / 2.0f;
 				float yf = (asize.cy - size.height) / 2.0f;
-				this->Render->DrawBitmap(this->Image, xf, yf, size.width, size.height);
+				this->Render->DrawBitmap(bmp, xf, yf, size.width, size.height);
 			}
 			break;
 			case ImageSizeMode::StretchIamge:
 			{
-				this->Render->DrawBitmap(this->Image, 0, 0, (float)asize.cx, (float)asize.cy);
+				this->Render->DrawBitmap(bmp, 0, 0, (float)asize.cx, (float)asize.cy);
 			}
 			break;
 			case ImageSizeMode::Zoom:
@@ -2249,7 +2286,7 @@ void Form::RenderImage()
 				float tp = xp < yp ? xp : yp;
 				float tw = size.width * tp, th = size.height * tp;
 				float xf = (asize.cx - tw) / 2.0f, yf = (asize.cy - th) / 2.0f;
-				this->Render->DrawBitmap(this->Image, xf, yf, tw, th);
+				this->Render->DrawBitmap(bmp, xf, yf, tw, th);
 			}
 			break;
 			default:

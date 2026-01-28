@@ -7,15 +7,15 @@
 
 namespace {
 
-ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics1* g, const char* data)
+std::shared_ptr<BitmapSource> ToBitmapFromSvg(const char* data)
 {
-	if (!g || !data) return NULL;
+	if (!data) return {};
 	int len = (int)strlen(data) + 1;
 	char* svg_text = new char[len];
 	memcpy(svg_text, data, len);
 	NSVGimage* image = nsvgParse(svg_text, "px", 96.0f);
 	delete[] svg_text;
-	if (!image) return NULL;
+	if (!image) return {};
 	float percen = 1.0f;
 	if (image->width > 4096 || image->height > 4096)
 	{
@@ -104,12 +104,9 @@ ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics1* g, const char* data)
 	}
 	nsvgDelete(image);
 	subg->EndRender();
-
-	auto result = g->CreateBitmap(renderSource);
-	renderSource->GetWicBitmap()->Release();
 	delete subg;
 
-	return result;
+	return renderSource;
 }
 
 std::wstring FileNameFromPath(const std::wstring& path)
@@ -132,22 +129,6 @@ DemoWindow::~DemoWindow()
 	{
 		delete _taskbar;
 		_taskbar = nullptr;
-	}
-	for (auto& b : _bmps)
-	{
-		if (b)
-		{
-			b->Release();
-			b = nullptr;
-		}
-	}
-	for (auto& i : _icons)
-	{
-		if (i)
-		{
-			i->Release();
-			i = nullptr;
-		}
 	}
 }
 
@@ -248,23 +229,18 @@ void DemoWindow::Picture_OnOpenImage(class Control* sender, MouseEventArgs e)
 	if (ofd.ShowDialog(this->Handle) != DialogResult::OK || ofd.SelectedPaths.empty())
 		return;
 
-	if (_picture->Image)
-	{
-		_picture->Image->Release();
-		_picture->Image = nullptr;
-	}
+	_picture->Image = nullptr;
 
 	FileInfo file(ofd.SelectedPaths[0]);
 	if (file.Extension() == ".svg" || file.Extension() == ".SVG")
 	{
 		auto svg = File::ReadAllText(file.FullName());
-		_picture->SetImageEx(ToBitmapFromSvg(this->Render, svg.c_str()), false);
+		_picture->SetImageEx(ToBitmapFromSvg(svg.c_str()));
 	}
 	else if (StringHelper::Contains(".jpg.jpeg.png.bmp.webp", StringHelper::ToLower(file.Extension())))
 	{
 		auto img = BitmapSource::FromFile(Convert::string_to_wstring(ofd.SelectedPaths[0]));
-		_picture->SetImageEx(this->Render->CreateBitmap(img->GetWicBitmap()), false);
-		img.reset();
+		_picture->SetImageEx(std::move(img));
 	}
 
 	Ui_UpdateStatus(L"PictureBox: 已加载图片");
@@ -276,23 +252,18 @@ void DemoWindow::Picture_OnDropFile(class Control* sender, List<std::wstring> fi
 	(void)sender;
 	if (!_picture || files.empty()) return;
 
-	if (_picture->Image)
-	{
-		_picture->Image->Release();
-		_picture->Image = nullptr;
-	}
+	_picture->Image = nullptr;
 
 	FileInfo file(Convert::wstring_to_string(files[0]));
 	if (file.Extension() == ".svg" || file.Extension() == ".SVG")
 	{
 		auto svg = File::ReadAllText(file.FullName());
-		_picture->SetImageEx(ToBitmapFromSvg(this->Render, svg.c_str()), false);
+		_picture->SetImageEx(ToBitmapFromSvg(svg.c_str()));
 	}
 	else if (StringHelper::Contains(".png.jpg.jpeg.bmp.webp", StringHelper::ToLower(file.Extension())))
 	{
 		auto img = BitmapSource::FromFile(files[0]);
-		_picture->SetImageEx(this->Render->CreateBitmap(img->GetWicBitmap()), false);
-		img.reset();
+		_picture->SetImageEx(std::move(img));
 	}
 	Ui_UpdateStatus(L"PictureBox: 拖拽载入");
 	this->Invalidate();
@@ -945,21 +916,21 @@ void DemoWindow::BuildTab_Media(TabPage* page)
 
 DemoWindow::DemoWindow() : Form(L"CUI Test Demo", { 0,0 }, { 1400,800 })
 {
-	_bmps[0] = ToBitmapFromSvg(this->Render, _0_ico);
-	_bmps[1] = ToBitmapFromSvg(this->Render, _1_ico);
-	_bmps[2] = ToBitmapFromSvg(this->Render, _2_ico);
-	_bmps[3] = ToBitmapFromSvg(this->Render, _3_ico);
-	_bmps[4] = ToBitmapFromSvg(this->Render, _4_ico);
-	_bmps[5] = ToBitmapFromSvg(this->Render, _5_ico);
-	_bmps[6] = ToBitmapFromSvg(this->Render, _6_ico);
-	_bmps[7] = ToBitmapFromSvg(this->Render, _7_ico);
-	_bmps[8] = ToBitmapFromSvg(this->Render, _8_ico);
-	_bmps[9] = ToBitmapFromSvg(this->Render, _9_ico);
-	_icons[0] = ToBitmapFromSvg(this->Render, icon0);
-	_icons[1] = ToBitmapFromSvg(this->Render, icon1);
-	_icons[2] = ToBitmapFromSvg(this->Render, icon2);
-	_icons[3] = ToBitmapFromSvg(this->Render, icon3);
-	_icons[4] = ToBitmapFromSvg(this->Render, icon4);
+	_bmps[0] = ToBitmapFromSvg(_0_ico);
+	_bmps[1] = ToBitmapFromSvg(_1_ico);
+	_bmps[2] = ToBitmapFromSvg(_2_ico);
+	_bmps[3] = ToBitmapFromSvg(_3_ico);
+	_bmps[4] = ToBitmapFromSvg(_4_ico);
+	_bmps[5] = ToBitmapFromSvg(_5_ico);
+	_bmps[6] = ToBitmapFromSvg(_6_ico);
+	_bmps[7] = ToBitmapFromSvg(_7_ico);
+	_bmps[8] = ToBitmapFromSvg(_8_ico);
+	_bmps[9] = ToBitmapFromSvg(_9_ico);
+	_icons[0] = ToBitmapFromSvg(icon0);
+	_icons[1] = ToBitmapFromSvg(icon1);
+	_icons[2] = ToBitmapFromSvg(icon2);
+	_icons[3] = ToBitmapFromSvg(icon3);
+	_icons[4] = ToBitmapFromSvg(icon4);
 
 	_taskbar = new Taskbar(this->Handle);
 	_notify = new NotifyIcon();

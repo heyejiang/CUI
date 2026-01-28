@@ -15,11 +15,15 @@ class TreeNode
 {
 public:
 	ULONG64 Tag = NULL;
-	ID2D1Bitmap* Image = NULL;
+	std::shared_ptr<BitmapSource> Image;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> ImageCache;
+	ID2D1RenderTarget* ImageCacheTarget = nullptr;
+	const BitmapSource* ImageCacheSource = nullptr;
 	std::wstring Text = L"";
 	List<TreeNode*> Children;
 	bool Expand = false; 
-	TreeNode(std::wstring text, ID2D1Bitmap* image = NULL);
+	TreeNode(std::wstring text, std::shared_ptr<BitmapSource> image = nullptr);
+	ID2D1Bitmap* GetImageBitmap(D2DGraphics* render);
 	~TreeNode();
 	/** @brief 展开状态下可渲染的总节点数量（含子树）。 */
 	int UnfoldedCount();

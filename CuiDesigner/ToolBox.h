@@ -25,11 +25,14 @@ public:
 	~ToolBoxItem() override;
 	void Update() override;
 
-	ID2D1Bitmap* GetIcon() const { return _iconBitmap; }
-	void EnsureIcon();
+	ID2D1Bitmap* GetIconBitmap(D2DGraphics* render);
+	void EnsureIconSource();
 
 private:
-	ID2D1Bitmap* _iconBitmap = nullptr;
+	std::shared_ptr<BitmapSource> _iconSource;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> _iconCache;
+	ID2D1RenderTarget* _iconCacheTarget = nullptr;
+	const BitmapSource* _iconCacheSource = nullptr;
 	
 };
 

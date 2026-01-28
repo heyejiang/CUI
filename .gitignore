@@ -124,3 +124,4 @@ dkms.conf
 /CppUtils/Graphics/x64/Release
 /CppUtils/CppUtils/x64/Release
 /CppUtils/UtilsTest/x64/Release
+/CUITest_Legacy/CUITest_Legacy/x64/Debug

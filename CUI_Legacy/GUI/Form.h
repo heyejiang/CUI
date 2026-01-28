@@ -59,6 +59,9 @@ private:
 	std::wstring _text;
 	Font* _font = NULL;
 	bool _ownsFont = false;
+	std::shared_ptr<BitmapSource> _imageSource;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> _imageCache;
+	ID2D1RenderTarget* _imageCacheTarget = nullptr;
 	bool _allowResize = true;
 	bool _maxBoxBeforeAllowResize = true;
 	enum class CaptionButtonKind : uint8_t { Minimize, Maximize, Close };
@@ -127,6 +130,8 @@ private:
 	static void EnsureOleInitialized();
 	void EnsureDropTargetRegistered();
 	void CleanupResources();
+	ID2D1Bitmap* EnsureImageCache();
+	void ResetImageCache();
 
 public:
 	FormMouseWheelEvent OnMouseWheel = FormMouseWheelEvent();
@@ -175,7 +180,9 @@ public:
 	int HeadHeight = 24;
 	D2D1_COLOR_F BackColor = Colors::WhiteSmoke;
 	D2D1_COLOR_F ForeColor = Colors::Black;
-	ID2D1Bitmap* Image = NULL;
+	PROPERTY(std::shared_ptr<BitmapSource>, Image);
+	GET(std::shared_ptr<BitmapSource>, Image);
+	SET(std::shared_ptr<BitmapSource>, Image);
 	ImageSizeMode SizeMode = ImageSizeMode::Normal;
 	PROPERTY(POINT, Location);
 	GET(POINT, Location);

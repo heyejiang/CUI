@@ -730,6 +730,20 @@ SET_CPP(Form, std::wstring, Text) {
 	this->ControlChanged = true;
 }
 
+GET_CPP(Form, std::shared_ptr<BitmapSource>, Image)
+{
+	return _imageSource;
+}
+
+SET_CPP(Form, std::shared_ptr<BitmapSource>, Image)
+{
+	if (value == _imageSource)
+		return;
+	_imageSource = std::move(value);
+	ResetImageCache();
+	this->ControlChanged = true;
+}
+
 class Font* Form::GetFont()
 {
 	if (this->_font)
@@ -1094,11 +1108,8 @@ void Form::CleanupResources()
 	this->UnderMouse = nullptr;
 	this->MainMenu = nullptr;
 
-	if (this->Image)
-	{
-		this->Image->Release();
-		this->Image = nullptr;
-	}
+	this->_imageSource.reset();
+	ResetImageCache();
 
 	if (this->_font && this->_ownsFont)
 	{
@@ -1147,6 +1158,30 @@ void Form::EnsureDropTargetRegistered()
 		_dropRegistered = true;
 		DragAcceptFiles(this->Handle, FALSE);
 	}
+}
+
+ID2D1Bitmap* Form::EnsureImageCache()
+{
+	if (!_imageSource || !this->Render)
+		return nullptr;
+	auto* target = this->Render->GetRenderTargetRaw();
+	if (!target)
+		return nullptr;
+	if (_imageCache && _imageCacheTarget == target)
+		return _imageCache.Get();
+	_imageCache.Reset();
+	_imageCacheTarget = target;
+	auto* bmp = this->Render->CreateBitmap(_imageSource);
+	if (!bmp)
+		return nullptr;
+	_imageCache.Attach(bmp);
+	return _imageCache.Get();
+}
+
+void Form::ResetImageCache()
+{
+	_imageCache.Reset();
+	_imageCacheTarget = nullptr;
 }
 
 void Form::SetLayoutEngine(class LayoutEngine* engine)
@@ -2087,9 +2122,10 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 }
 void Form::RenderImage()
 {
-	if (this->Image)
+	auto* bmp = EnsureImageCache();
+	if (bmp)
 	{
-		auto size = this->Image->GetSize();
+		auto size = bmp->GetSize();
 		if (size.width > 0 && size.height > 0)
 		{
 			// 自绘标题栏属于 client 区域的一部分：背景图应铺满整个窗口区域（0..Size）
@@ -2098,19 +2134,19 @@ void Form::RenderImage()
 			{
 			case ImageSizeMode::Normal:
 			{
-				this->Render->DrawBitmap(this->Image, 0, 0, size.width, size.height);
+				this->Render->DrawBitmap(bmp, 0, 0, size.width, size.height);
 			}
 			break;
 			case ImageSizeMode::CenterImage:
 			{
 				float xf = (asize.cx - size.width) / 2.0f;
 				float yf = (asize.cy - size.height) / 2.0f;
-				this->Render->DrawBitmap(this->Image, xf, yf, size.width, size.height);
+				this->Render->DrawBitmap(bmp, xf, yf, size.width, size.height);
 			}
 			break;
 			case ImageSizeMode::StretchIamge:
 			{
-				this->Render->DrawBitmap(this->Image, 0, 0, (float)asize.cx, (float)asize.cy);
+				this->Render->DrawBitmap(bmp, 0, 0, (float)asize.cx, (float)asize.cy);
 			}
 			break;
 			case ImageSizeMode::Zoom:
@@ -2119,7 +2155,7 @@ void Form::RenderImage()
 				float tp = xp < yp ? xp : yp;
 				float tw = size.width * tp, th = size.height * tp;
 				float xf = (asize.cx - tw) / 2.0f, yf = (asize.cy - th) / 2.0f;
-				this->Render->DrawBitmap(this->Image, xf, yf, tw, th);
+				this->Render->DrawBitmap(bmp, xf, yf, tw, th);
 			}
 			break;
 			default:
@@ -2224,11 +2260,7 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 		if (message == WM_CUI_RENDER_TARGET_RECREATED)
 		{
 			// 清理所有可能持有旧 ID2D1Bitmap 的缓存，避免继续绘制导致 EndDraw 永远失败。
-			if (form->Image)
-			{
-				form->Image->Release();
-				form->Image = nullptr;
-			}
+			form->ResetImageCache();
 			for (auto c : form->Controls)
 			{
 				if (c) c->OnRenderTargetRecreated();
@@ -2298,10 +2330,8 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 					return 0;
 				}
 
-				// 关键：RDP 断开/重连、DWM/显示设备变化后，系统可能会直接触发 WM_PAINT。
-				// 此时即使 ControlChanged==false 也必须按 rcPaint 进行重绘，否则会出现“画面不再刷新”。
-				bool force = (form->ControlChanged || !form->_hasRenderedOnce);
-				form->UpdateDirtyRect(ps.rcPaint, force);
+				if (form->ControlChanged || !form->_hasRenderedOnce)
+					form->UpdateDirtyRect(ps.rcPaint, true);
 			}
 			EndPaint(hWnd, &ps);
 			return 0;

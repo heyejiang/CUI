@@ -1458,11 +1458,6 @@ void HwndGraphics::ReSize(UINT width, UINT height) {
 	if (hr == D2DERR_RECREATE_TARGET) {
 		// 典型触发场景：远程桌面断开/重连、显示设备切换等导致 render target 失效。
 		ResetTarget();
-		if (SUCCEEDED(InitDevice())) {
-			::PostMessageW(hwnd, WM_CUI_RENDER_TARGET_RECREATED, 0, 0);
-			::InvalidateRect(hwnd, nullptr, FALSE);
-			::UpdateWindow(hwnd);
-		}
 	}
 }
 
@@ -1484,10 +1479,5 @@ void HwndGraphics::EndRender() {
 	if (hr == D2DERR_RECREATE_TARGET) {
 		// 目标丢失：重建 HwndRenderTarget（下一次渲染即可恢复）。
 		ResetTarget();
-		if (SUCCEEDED(InitDevice())) {
-			::PostMessageW(hwnd, WM_CUI_RENDER_TARGET_RECREATED, 0, 0);
-			::InvalidateRect(hwnd, nullptr, FALSE);
-			::UpdateWindow(hwnd);
-		}
 	}
 }

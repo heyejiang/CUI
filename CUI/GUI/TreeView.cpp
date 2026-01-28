@@ -43,18 +43,18 @@ static void renderNodes(TreeView* tree, D2DGraphics1* d2d, float x, float y, flo
 
 				d2d->FillTriangle(tri, foreColor);
 
-				if (c->Image)
+				if (auto* bmp = c->GetImageBitmap(d2d))
 				{
-					d2d->DrawBitmap(c->Image, renderLeft + (itemHeight * 0.8f), renderTop + y, itemHeight, itemHeight);
+					d2d->DrawBitmap(bmp, renderLeft + (itemHeight * 0.8f), renderTop + y, itemHeight, itemHeight);
 					renderLeft += itemHeight;
 				}
 				d2d->DrawString(c->Text, renderLeft + (itemHeight * 0.8f), renderTop + y, foreColor, tree->Font);
 			}
 			else
 			{
-				if (c->Image)
+				if (auto* bmp = c->GetImageBitmap(d2d))
 				{
-					d2d->DrawBitmap(c->Image, renderLeft, renderTop + y, itemHeight, itemHeight);
+					d2d->DrawBitmap(bmp, renderLeft, renderTop + y, itemHeight, itemHeight);
 					renderLeft += itemHeight;
 				}
 				d2d->DrawString(c->Text, renderLeft, renderTop + y, foreColor, tree->Font);
@@ -101,12 +101,31 @@ static TreeNode* findNode(float posX, float posY, float w, float h, float itemHe
 	return NULL;
 }
 
-TreeNode::TreeNode(std::wstring text, ID2D1Bitmap* image)
+TreeNode::TreeNode(std::wstring text, std::shared_ptr<BitmapSource> image)
 {
 	this->Text = text;
-	this->Image = image;
+	this->Image = std::move(image);
 	this->Expand = false;
 	this->Children = List<TreeNode*>();
+}
+
+ID2D1Bitmap* TreeNode::GetImageBitmap(D2DGraphics1* render)
+{
+	if (!render || !Image)
+		return nullptr;
+	auto* target = render->GetRenderTargetRaw();
+	if (!target)
+		return nullptr;
+	if (ImageCache && ImageCacheTarget == target && ImageCacheSource == Image.get())
+		return ImageCache.Get();
+	ImageCache.Reset();
+	ImageCacheTarget = target;
+	ImageCacheSource = Image.get();
+	auto* bmp = render->CreateBitmap(Image);
+	if (!bmp)
+		return nullptr;
+	ImageCache.Attach(bmp);
+	return ImageCache.Get();
 }
 TreeNode::~TreeNode()
 {

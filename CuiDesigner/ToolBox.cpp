@@ -10,15 +10,15 @@
 
 const char* _ico = R"(<svg t="1766410686901" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5087" data-darkreader-inline-fill="" width="200" height="200"><path d="M496 895.2L138.4 771.2c-6.4-2.4-10.4-8-10.4-15.2V287.2l368 112v496z m32 0l357.6-124c6.4-2.4 10.4-8 10.4-15.2V287.2l-368 112v496z m-400-640l384 112 384-112-379.2-125.6c-3.2-0.8-7.2-0.8-10.4 0L128 255.2z" p-id="5088" fill="#1afa29" data-darkreader-inline-fill="" style="--darkreader-inline-fill: var(--darkreader-background-1afa29, #11ce4a);"></path></svg>)";
 
-static ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics* g, const char* data)
+static std::shared_ptr<BitmapSource> ToBitmapFromSvg(const char* data)
 {
-	if (!g || !data) return NULL;
+	if (!data) return {};
 	int len = (int)strlen(data) + 1;
 	char* svg_text = new char[len];
 	memcpy(svg_text, data, len);
 	NSVGimage* image = nsvgParse(svg_text, "px", 96.0f);
 	delete[] svg_text;
-	if (!image) return NULL;
+	if (!image) return {};
 	float percen = 1.0f;
 	if (image->width > 4096 || image->height > 4096)
 	{
@@ -103,11 +103,8 @@ static ID2D1Bitmap* ToBitmapFromSvg(D2DGraphics* g, const char* data)
 	}
 	nsvgDelete(image);
 	subg->EndRender();
-
-	auto result = g->CreateBitmap(renderSource);
-	renderSource->GetWicBitmap()->Release();
 	delete subg;
-	return result;
+	return renderSource;
 }
 
 static const char* GetToolBoxSvg(UIClass type)
@@ -117,24 +114,41 @@ static const char* GetToolBoxSvg(UIClass type)
 
 ToolBoxItem::~ToolBoxItem()
 {
-	if (_iconBitmap)
-	{
-		_iconBitmap->Release();
-		_iconBitmap = nullptr;
-	}
+	_iconSource.reset();
+	_iconCache.Reset();
+	_iconCacheTarget = nullptr;
 }
 
-void ToolBoxItem::EnsureIcon()
+void ToolBoxItem::EnsureIconSource()
 {
-	if (_iconBitmap || !this->ParentForm || !this->ParentForm->Render) return;
-	if (!SvgData) return;
-	_iconBitmap = ToBitmapFromSvg(this->ParentForm->Render, SvgData);
+	if (_iconSource || !SvgData) return;
+	_iconSource = ToBitmapFromSvg(SvgData);
+}
+
+ID2D1Bitmap* ToolBoxItem::GetIconBitmap(D2DGraphics* render)
+{
+	EnsureIconSource();
+	if (!render || !_iconSource)
+		return nullptr;
+	auto* target = render->GetRenderTargetRaw();
+	if (!target)
+		return nullptr;
+	if (_iconCache && _iconCacheTarget == target && _iconCacheSource == _iconSource.get())
+		return _iconCache.Get();
+	_iconCache.Reset();
+	_iconCacheTarget = target;
+	_iconCacheSource = _iconSource.get();
+	auto* bmp = render->CreateBitmap(_iconSource);
+	if (!bmp)
+		return nullptr;
+	_iconCache.Attach(bmp);
+	return _iconCache.Get();
 }
 
 void ToolBoxItem::Update()
 {
 	if (!this->IsVisual) return;
-	EnsureIcon();
+	EnsureIconSource();
 	bool isUnderMouse = this->ParentForm->UnderMouse == this;
 	bool isSelected = this->ParentForm->Selected == this;
 	auto d2d = this->ParentForm->Render;
@@ -154,9 +168,9 @@ void ToolBoxItem::Update()
 		float iconSize = 20.0f;
 		float iconLeft = (float)abslocation.x + paddingLeft;
 		float iconTop = (float)abslocation.y + ((float)size.cy - iconSize) / 2.0f;
-		if (_iconBitmap)
+		if (auto* bmp = GetIconBitmap(d2d))
 		{
-			d2d->DrawBitmap(_iconBitmap, iconLeft, iconTop, iconSize, iconSize);
+			d2d->DrawBitmap(bmp, iconLeft, iconTop, iconSize, iconSize);
 		}
 
 		auto font = this->Font;

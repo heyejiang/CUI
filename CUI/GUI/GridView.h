@@ -57,18 +57,22 @@ class CellValue
 {
 public:
 	std::wstring Text;
-	ID2D1Bitmap* Image;
+	std::shared_ptr<BitmapSource> Image;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> ImageCache;
+	ID2D1RenderTarget* ImageCacheTarget = nullptr;
+	const BitmapSource* ImageCacheSource = nullptr;
 	__int64 Tag;
 	CellValue();
 	CellValue(std::wstring s);
 	CellValue(wchar_t* s);
 	CellValue(const wchar_t* s);
-	CellValue(ID2D1Bitmap* img);
+	CellValue(std::shared_ptr<BitmapSource> img);
 	CellValue(__int64 tag);
 	CellValue(bool tag);
 	CellValue(__int32 tag);
 	CellValue(unsigned __int32 tag);
 	CellValue(unsigned __int64 tag);
+	ID2D1Bitmap* GetImageBitmap(D2DGraphics1* render);
 };
 class GridViewRow
 {

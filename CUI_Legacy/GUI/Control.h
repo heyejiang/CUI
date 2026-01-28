@@ -17,6 +17,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <memory>
+#include <wrl/client.h>
 #include "Layout/LayoutTypes.h"
 
 struct ID2D1Bitmap;
@@ -144,7 +146,7 @@ typedef Event<void(class Control*)> SelectionChangedEvent;
  *
  * 所有权说明：
  * - Font：通过属性 Font 设置时默认由控件接管并在替换/析构时释放；可用 SetFontEx 指定不接管。
- * - Image：通过属性 Image 设置时默认由控件接管并在替换/析构时 Release；可用 SetImageEx 指定不接管。
+ * - Image：改为存储 BitmapSource（设备无关），渲染时按需创建 ID2D1Bitmap 缓存。
  */
 class Control
 {
@@ -154,8 +156,9 @@ protected:
 	D2D1_COLOR_F _backcolor = Colors::gray91;
 	D2D1_COLOR_F _forecolor = Colors::Black;
 	D2D1_COLOR_F _boldercolor = Colors::Black;
-	ID2D1Bitmap* _image = NULL;
-	bool _ownsImage = false;
+	std::shared_ptr<BitmapSource> _imageSource;
+	Microsoft::WRL::ComPtr<ID2D1Bitmap> _imageCache;
+	ID2D1RenderTarget* _imageCacheTarget = nullptr;
 	std::wstring _text;
 	Font* _font = NULL;
 	bool _ownsFont = false;
@@ -369,11 +372,13 @@ public:
 	PROPERTY(D2D1_COLOR_F, ForeColor);
 	GET(D2D1_COLOR_F, ForeColor);
 	SET(D2D1_COLOR_F, ForeColor);
-	PROPERTY(ID2D1Bitmap*, Image);
-	GET(ID2D1Bitmap*, Image);
-	SET(ID2D1Bitmap*, Image);
-	// 显式设置 Image 所有权（默认：通过属性 Image 设置时视为“拥有”并在析构/替换时 Release）
-	void SetImageEx(ID2D1Bitmap* value, bool takeOwnership);
+	PROPERTY(std::shared_ptr<BitmapSource>, Image);
+	GET(std::shared_ptr<BitmapSource>, Image);
+	SET(std::shared_ptr<BitmapSource>, Image);
+	// 设置图片源（设备无关），并清空设备相关缓存。
+	void SetImageEx(std::shared_ptr<BitmapSource> value);
+	// 获取/重建与当前渲染设备匹配的 Bitmap 缓存。
+	ID2D1Bitmap* EnsureImageCache();
 
 	// 布局属性访问器
 	PROPERTY(Thickness, Margin);
@@ -432,7 +437,7 @@ public:
 	virtual CursorKind QueryCursor(int xof, int yof) { (void)xof; (void)yof; return this->Cursor; }
 	virtual bool HitTestChildren() const { return true; }
 	// 当底层 render target 因设备变化被重建时调用（例如 RDP 断开/重连）。
-	// 默认实现会清空缓存的 Image，避免继续使用旧的 ID2D1Bitmap。
+	// 默认实现会清空缓存的 Bitmap，避免继续使用旧的 ID2D1Bitmap。
 	virtual void OnRenderTargetRecreated();
 	virtual void RenderImage();
 	virtual SIZE ActualSize();

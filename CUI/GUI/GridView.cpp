@@ -6,35 +6,54 @@
 #include <cwchar>
 #pragma comment(lib, "Imm32.lib")
 
-CellValue::CellValue() : Text(L""), Image(NULL), Tag(NULL)
+CellValue::CellValue() : Text(L""), Image(nullptr), Tag(NULL)
 {
 }
-CellValue::CellValue(std::wstring s) : Text(s), Tag(NULL), Image(NULL)
+CellValue::CellValue(std::wstring s) : Text(s), Tag(NULL), Image(nullptr)
 {
 }
-CellValue::CellValue(wchar_t* s) :Text(s), Tag(NULL), Image(NULL)
+CellValue::CellValue(wchar_t* s) :Text(s), Tag(NULL), Image(nullptr)
 {
 }
-CellValue::CellValue(const wchar_t* s) : Text(s), Tag(NULL), Image(NULL)
+CellValue::CellValue(const wchar_t* s) : Text(s), Tag(NULL), Image(nullptr)
 {
 }
-CellValue::CellValue(ID2D1Bitmap* img) : Text(L""), Tag(NULL), Image(img)
+CellValue::CellValue(std::shared_ptr<BitmapSource> img) : Text(L""), Tag(NULL), Image(std::move(img))
 {
 }
-CellValue::CellValue(__int64 tag) : Text(L""), Tag(tag), Image(NULL)
+CellValue::CellValue(__int64 tag) : Text(L""), Tag(tag), Image(nullptr)
 {
 }
-CellValue::CellValue(bool tag) : Text(L""), Tag(tag), Image(NULL)
+CellValue::CellValue(bool tag) : Text(L""), Tag(tag), Image(nullptr)
 {
 }
-CellValue::CellValue(__int32 tag) : Text(L""), Tag(tag), Image(NULL)
+CellValue::CellValue(__int32 tag) : Text(L""), Tag(tag), Image(nullptr)
 {
 }
-CellValue::CellValue(unsigned __int32 tag) : Text(L""), Tag(tag), Image(NULL)
+CellValue::CellValue(unsigned __int32 tag) : Text(L""), Tag(tag), Image(nullptr)
 {
 }
-CellValue::CellValue(unsigned __int64 tag) : Text(L""), Tag(tag), Image(NULL)
+CellValue::CellValue(unsigned __int64 tag) : Text(L""), Tag(tag), Image(nullptr)
 {
+}
+
+ID2D1Bitmap* CellValue::GetImageBitmap(D2DGraphics1* render)
+{
+	if (!render || !Image)
+		return nullptr;
+	auto* target = render->GetRenderTargetRaw();
+	if (!target)
+		return nullptr;
+	if (ImageCache && ImageCacheTarget == target && ImageCacheSource == Image.get())
+		return ImageCache.Get();
+	ImageCache.Reset();
+	ImageCacheTarget = target;
+	ImageCacheSource = Image.get();
+	auto* bmp = render->CreateBitmap(Image);
+	if (!bmp)
+		return nullptr;
+	ImageCache.Attach(bmp);
+	return ImageCache.Get();
 }
 CellValue& GridViewRow::operator[](int idx)
 {
@@ -917,8 +936,8 @@ void GridView::Update()
 									r == this->UnderMouseRowIndex ? 1.0f : 0.5f);
 								if (row.Cells.Count > c)
 								{
-									if (row.Cells[c].Image)
-										d2d->DrawBitmap(row.Cells[c].Image,
+									if (auto* bmp = row.Cells[c].GetImageBitmap(d2d))
+										d2d->DrawBitmap(bmp,
 											abslocation.x + drawX + left,
 											abslocation.y + yf + top,
 											_size, _size
@@ -931,8 +950,8 @@ void GridView::Update()
 									r == this->UnderMouseRowIndex ? 1.0f : 0.5f);
 								if (row.Cells.Count > c)
 								{
-									if (row.Cells[c].Image)
-										d2d->DrawBitmap(row.Cells[c].Image,
+									if (auto* bmp = row.Cells[c].GetImageBitmap(d2d))
+										d2d->DrawBitmap(bmp,
 											abslocation.x + drawX + left,
 											abslocation.y + yf + top,
 											_size, _size
