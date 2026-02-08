@@ -427,9 +427,20 @@ void RichTextBox::InputText(std::wstring input)
 	int sele = SelectionEnd >= SelectionStart ? SelectionEnd : SelectionStart;
 
 	std::wstring oldText = this->buffer;
+	UndoRecord rec;
+	bool shouldRecord = false;
 	sels = std::clamp(sels, 0, (int)this->buffer.size());
 	sele = std::clamp(sele, 0, (int)this->buffer.size());
 
+	if (!this->isApplyingUndoRedo && (!input.empty() || sele > sels))
+	{
+		rec.pos = sels;
+		rec.removedText = (sele > sels) ? this->buffer.substr((size_t)sels, (size_t)(sele - sels)) : L"";
+		rec.insertedText = input;
+		rec.selStartBefore = this->SelectionStart;
+		rec.selEndBefore = this->SelectionEnd;
+		shouldRecord = true;
+	}
 	if (sels == sele && sels == (int)this->buffer.size())
 	{
 		this->buffer.append(input);
@@ -456,6 +467,13 @@ void RichTextBox::InputText(std::wstring input)
 	TrimToMaxLength();
 	this->selRangeDirty = true;
 	this->blocksDirty = true;
+	if (shouldRecord)
+	{
+		rec.selStartAfter = this->SelectionStart;
+		rec.selEndAfter = this->SelectionEnd;
+		this->undoStack.push_back(rec);
+		this->redoStack.clear();
+	}
 	SyncControlTextFromBuffer(oldText);
 }
 void RichTextBox::InputBack()
@@ -465,22 +483,49 @@ void RichTextBox::InputBack()
 	int sele = SelectionEnd >= SelectionStart ? SelectionEnd : SelectionStart;
 	int selLen = sele - sels;
 	std::wstring oldText = this->buffer;
+	UndoRecord rec;
+	bool shouldRecord = false;
 	sels = std::clamp(sels, 0, (int)this->buffer.size());
 	sele = std::clamp(sele, 0, (int)this->buffer.size());
 	selLen = sele - sels;
 
 	if (selLen > 0)
 	{
+		if (!this->isApplyingUndoRedo)
+		{
+			rec.pos = sels;
+			rec.removedText = this->buffer.substr((size_t)sels, (size_t)selLen);
+			rec.insertedText = L"";
+			rec.selStartBefore = this->SelectionStart;
+			rec.selEndBefore = this->SelectionEnd;
+			shouldRecord = true;
+		}
 		this->SelectionStart = this->SelectionEnd = sels;
 		this->buffer.erase((size_t)sels, (size_t)selLen);
 	}
 	else if (sels > 0)
 	{
+		if (!this->isApplyingUndoRedo)
+		{
+			rec.pos = sels - 1;
+			rec.removedText = this->buffer.substr((size_t)sels - 1, 1);
+			rec.insertedText = L"";
+			rec.selStartBefore = this->SelectionStart;
+			rec.selEndBefore = this->SelectionEnd;
+			shouldRecord = true;
+		}
 		this->buffer.erase((size_t)sels - 1, 1);
 		this->SelectionStart = this->SelectionEnd = sels - 1;
 	}
 	this->selRangeDirty = true;
 	this->blocksDirty = true;
+	if (shouldRecord)
+	{
+		rec.selStartAfter = this->SelectionStart;
+		rec.selEndAfter = this->SelectionEnd;
+		this->undoStack.push_back(rec);
+		this->redoStack.clear();
+	}
 	SyncControlTextFromBuffer(oldText);
 }
 void RichTextBox::InputDelete()
@@ -490,23 +535,105 @@ void RichTextBox::InputDelete()
 	int sele = SelectionEnd >= SelectionStart ? SelectionEnd : SelectionStart;
 	int selLen = sele - sels;
 	std::wstring oldText = this->buffer;
+	UndoRecord rec;
+	bool shouldRecord = false;
 	sels = std::clamp(sels, 0, (int)this->buffer.size());
 	sele = std::clamp(sele, 0, (int)this->buffer.size());
 	selLen = sele - sels;
 
 	if (selLen > 0)
 	{
+		if (!this->isApplyingUndoRedo)
+		{
+			rec.pos = sels;
+			rec.removedText = this->buffer.substr((size_t)sels, (size_t)selLen);
+			rec.insertedText = L"";
+			rec.selStartBefore = this->SelectionStart;
+			rec.selEndBefore = this->SelectionEnd;
+			shouldRecord = true;
+		}
 		this->SelectionStart = this->SelectionEnd = sels;
 		this->buffer.erase((size_t)sels, (size_t)selLen);
 	}
 	else if (sels < (int)this->buffer.size())
 	{
+		if (!this->isApplyingUndoRedo)
+		{
+			rec.pos = sels;
+			rec.removedText = this->buffer.substr((size_t)sels, 1);
+			rec.insertedText = L"";
+			rec.selStartBefore = this->SelectionStart;
+			rec.selEndBefore = this->SelectionEnd;
+			shouldRecord = true;
+		}
 		this->buffer.erase((size_t)sels, 1);
 		this->SelectionStart = this->SelectionEnd = sels;
 	}
 	this->selRangeDirty = true;
 	this->blocksDirty = true;
+	if (shouldRecord)
+	{
+		rec.selStartAfter = this->SelectionStart;
+		rec.selEndAfter = this->SelectionEnd;
+		this->undoStack.push_back(rec);
+		this->redoStack.clear();
+	}
 	SyncControlTextFromBuffer(oldText);
+}
+void RichTextBox::ApplyUndoRecord(const UndoRecord& rec, bool isUndo)
+{
+	SyncBufferFromControlIfNeeded();
+	std::wstring oldText = this->buffer;
+	this->isApplyingUndoRedo = true;
+
+	int pos = std::clamp(rec.pos, 0, (int)this->buffer.size());
+	const std::wstring& removeText = isUndo ? rec.insertedText : rec.removedText;
+	const std::wstring& insertText = isUndo ? rec.removedText : rec.insertedText;
+
+	if (!removeText.empty() && pos <= (int)this->buffer.size())
+	{
+		size_t removeLen = std::min(removeText.size(), this->buffer.size() - (size_t)pos);
+		this->buffer.erase((size_t)pos, removeLen);
+	}
+	if (!insertText.empty())
+	{
+		this->buffer.insert((size_t)pos, insertText);
+	}
+
+	if (isUndo)
+	{
+		this->SelectionStart = rec.selStartBefore;
+		this->SelectionEnd = rec.selEndBefore;
+	}
+	else
+	{
+		this->SelectionStart = rec.selStartAfter;
+		this->SelectionEnd = rec.selEndAfter;
+	}
+	TrimToMaxLength();
+	this->SelectionStart = std::clamp(this->SelectionStart, 0, (int)this->buffer.size());
+	this->SelectionEnd = std::clamp(this->SelectionEnd, 0, (int)this->buffer.size());
+	this->selRangeDirty = true;
+	this->blocksDirty = true;
+
+	this->isApplyingUndoRedo = false;
+	SyncControlTextFromBuffer(oldText);
+}
+void RichTextBox::Undo()
+{
+	if (this->undoStack.empty()) return;
+	UndoRecord rec = this->undoStack.back();
+	this->undoStack.pop_back();
+	ApplyUndoRecord(rec, true);
+	this->redoStack.push_back(rec);
+}
+void RichTextBox::Redo()
+{
+	if (this->redoStack.empty()) return;
+	UndoRecord rec = this->redoStack.back();
+	this->redoStack.pop_back();
+	ApplyUndoRecord(rec, false);
+	this->undoStack.push_back(rec);
 }
 void RichTextBox::UpdateScroll(bool arrival)
 {
@@ -940,6 +1067,23 @@ bool RichTextBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int
 			UpdateScroll();
 			this->PostRender();
 			return true;
+		}
+		if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
+		{
+			if (wParam == 'Z')
+			{
+				this->Undo();
+				UpdateScroll();
+				this->PostRender();
+				return true;
+			}
+			if (wParam == 'Y')
+			{
+				this->Redo();
+				UpdateScroll();
+				this->PostRender();
+				return true;
+			}
 		}
 
 		auto pos = this->AbsLocation;

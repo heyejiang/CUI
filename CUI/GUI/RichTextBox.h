@@ -17,6 +17,19 @@ private:
 	std::wstring buffer;
 	bool bufferSyncedFromControl = false;
 	::Font* _lastLayoutFont = NULL;
+	struct UndoRecord
+	{
+		int pos = 0;
+		std::wstring removedText;
+		std::wstring insertedText;
+		int selStartBefore = 0;
+		int selEndBefore = 0;
+		int selStartAfter = 0;
+		int selEndAfter = 0;
+	};
+	std::vector<UndoRecord> undoStack;
+	std::vector<UndoRecord> redoStack;
+	bool isApplyingUndoRedo = false;
 
 	POINT selectedPos = { 0,0 };
 	bool isDraggingScroll = false;
@@ -101,6 +114,9 @@ private:
 	void InputText(std::wstring input);
 	void InputBack();
 	void InputDelete();
+	void ApplyUndoRecord(const UndoRecord& rec, bool isUndo);
+	void Undo();
+	void Redo();
 	void UpdateScroll(bool arrival = false);
 	void UpdateLayout();
 	void UpdateSelRange();

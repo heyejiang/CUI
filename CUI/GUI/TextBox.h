@@ -40,10 +40,26 @@ protected:
 	D2D1_RECT_F _caretRectCache = { 0,0,0,0 };
 	bool _caretRectCacheValid = false;
 private:
+	struct UndoRecord
+	{
+		int pos = 0;
+		std::wstring removedText;
+		std::wstring insertedText;
+		int selStartBefore = 0;
+		int selEndBefore = 0;
+		int selStartAfter = 0;
+		int selEndAfter = 0;
+	};
+	std::vector<UndoRecord> undoStack;
+	std::vector<UndoRecord> redoStack;
+	bool isApplyingUndoRedo = false;
 	void InputText(std::wstring input);
 	void InputBack();
 	void InputDelete();
 	void UpdateScroll(bool arrival = false);
+	void ApplyUndoRecord(const UndoRecord& rec, bool isUndo);
+	void Undo();
+	void Redo();
 public:
 	/** @brief 返回当前选中的文本片段。 */
 	std::wstring GetSelectedString();

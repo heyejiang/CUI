@@ -15,6 +15,23 @@ void TextBox::InputText(std::wstring input)
 	std::wstring oldStr = this->Text;
 	int sels = SelectionStart <= SelectionEnd ? SelectionStart : SelectionEnd;
 	int sele = SelectionEnd >= SelectionStart ? SelectionEnd : SelectionStart;
+	UndoRecord rec;
+	bool shouldRecord = false;
+	int recSels = std::clamp(sels, 0, (int)this->Text.size());
+	int recSele = std::clamp(sele, 0, (int)this->Text.size());
+	if (!this->isApplyingUndoRedo && (!input.empty() || recSele > recSels))
+	{
+		rec.pos = recSels;
+		rec.removedText = (recSele > recSels) ? this->Text.substr((size_t)recSels, (size_t)(recSele - recSels)) : L"";
+		rec.insertedText = input;
+		for (auto& ch : rec.insertedText)
+		{
+			if (ch == L'\r' || ch == L'\n') ch = L' ';
+		}
+		rec.selStartBefore = this->SelectionStart;
+		rec.selEndBefore = this->SelectionEnd;
+		shouldRecord = true;
+	}
 	if (sele >= this->Text.size() && sels >= this->Text.size())
 	{
 		this->Text += input;
@@ -66,6 +83,13 @@ void TextBox::InputText(std::wstring input)
 		}
 	}
 	this->Text = std::wstring(tmp.data());
+	if (shouldRecord)
+	{
+		rec.selStartAfter = this->SelectionStart;
+		rec.selEndAfter = this->SelectionEnd;
+		this->undoStack.push_back(rec);
+		this->redoStack.clear();
+	}
 	this->OnTextChanged(this, oldStr, this->Text);
 }
 void TextBox::InputBack()
@@ -74,8 +98,21 @@ void TextBox::InputBack()
 	int sels = SelectionStart <= SelectionEnd ? SelectionStart : SelectionEnd;
 	int sele = SelectionEnd >= SelectionStart ? SelectionEnd : SelectionStart;
 	int selLen = sele - sels;
+	UndoRecord rec;
+	bool shouldRecord = false;
 	if (selLen > 0)
 	{
+		if (!this->isApplyingUndoRedo)
+		{
+			int recSels = std::clamp(sels, 0, (int)this->Text.size());
+			int recSele = std::clamp(sele, 0, (int)this->Text.size());
+			rec.pos = recSels;
+			rec.removedText = (recSele > recSels) ? this->Text.substr((size_t)recSels, (size_t)(recSele - recSels)) : L"";
+			rec.insertedText = L"";
+			rec.selStartBefore = this->SelectionStart;
+			rec.selEndBefore = this->SelectionEnd;
+			shouldRecord = true;
+		}
 		List<wchar_t> tmp = List<wchar_t>((wchar_t*)this->Text.c_str(), this->Text.size());
 		for (int i = 0; i < selLen; i++)
 		{
@@ -89,12 +126,29 @@ void TextBox::InputBack()
 	{
 		if (sels > 0)
 		{
+			if (!this->isApplyingUndoRedo)
+			{
+				int recPos = std::clamp(sels - 1, 0, (int)this->Text.size());
+				rec.pos = recPos;
+				rec.removedText = this->Text.substr((size_t)recPos, (size_t)1);
+				rec.insertedText = L"";
+				rec.selStartBefore = this->SelectionStart;
+				rec.selEndBefore = this->SelectionEnd;
+				shouldRecord = true;
+			}
 			List<wchar_t> tmp = List<wchar_t>((wchar_t*)this->Text.c_str(), this->Text.size());
 			tmp.RemoveAt(sels - 1);
 			tmp.Add(L'\0');
 			this->SelectionStart = this->SelectionEnd = sels - 1;
 			this->Text = tmp.data();
 		}
+	}
+	if (shouldRecord)
+	{
+		rec.selStartAfter = this->SelectionStart;
+		rec.selEndAfter = this->SelectionEnd;
+		this->undoStack.push_back(rec);
+		this->redoStack.clear();
 	}
 	this->OnTextChanged(this, oldStr, this->Text);
 }
@@ -104,8 +158,21 @@ void TextBox::InputDelete()
 	int sels = SelectionStart <= SelectionEnd ? SelectionStart : SelectionEnd;
 	int sele = SelectionEnd >= SelectionStart ? SelectionEnd : SelectionStart;
 	int selLen = sele - sels;
+	UndoRecord rec;
+	bool shouldRecord = false;
 	if (selLen > 0)
 	{
+		if (!this->isApplyingUndoRedo)
+		{
+			int recSels = std::clamp(sels, 0, (int)this->Text.size());
+			int recSele = std::clamp(sele, 0, (int)this->Text.size());
+			rec.pos = recSels;
+			rec.removedText = (recSele > recSels) ? this->Text.substr((size_t)recSels, (size_t)(recSele - recSels)) : L"";
+			rec.insertedText = L"";
+			rec.selStartBefore = this->SelectionStart;
+			rec.selEndBefore = this->SelectionEnd;
+			shouldRecord = true;
+		}
 		List<wchar_t> tmp = List<wchar_t>((wchar_t*)this->Text.c_str(), this->Text.size());
 		for (int i = 0; i < selLen; i++)
 		{
@@ -119,6 +186,16 @@ void TextBox::InputDelete()
 	{
 		if (sels < this->Text.size())
 		{
+			if (!this->isApplyingUndoRedo)
+			{
+				int recPos = std::clamp(sels, 0, (int)this->Text.size());
+				rec.pos = recPos;
+				rec.removedText = this->Text.substr((size_t)recPos, (size_t)1);
+				rec.insertedText = L"";
+				rec.selStartBefore = this->SelectionStart;
+				rec.selEndBefore = this->SelectionEnd;
+				shouldRecord = true;
+			}
 			List<wchar_t> tmp = List<wchar_t>((wchar_t*)this->Text.c_str(), this->Text.size());
 			tmp.RemoveAt(sels);
 			tmp.Add(L'\0');
@@ -126,7 +203,70 @@ void TextBox::InputDelete()
 			this->Text = tmp.data();
 		}
 	}
+	if (shouldRecord)
+	{
+		rec.selStartAfter = this->SelectionStart;
+		rec.selEndAfter = this->SelectionEnd;
+		this->undoStack.push_back(rec);
+		this->redoStack.clear();
+	}
 	this->OnTextChanged(this, oldStr, this->Text);
+}
+void TextBox::ApplyUndoRecord(const UndoRecord& rec, bool isUndo)
+{
+	std::wstring oldStr = this->Text;
+	std::wstring newText = this->Text;
+	this->isApplyingUndoRedo = true;
+
+	int pos = std::clamp(rec.pos, 0, (int)newText.size());
+	const std::wstring& removeText = isUndo ? rec.insertedText : rec.removedText;
+	const std::wstring& insertText = isUndo ? rec.removedText : rec.insertedText;
+
+	if (!removeText.empty() && pos <= (int)newText.size())
+	{
+		size_t removeLen = std::min(removeText.size(), newText.size() - (size_t)pos);
+		newText.erase((size_t)pos, removeLen);
+	}
+	if (!insertText.empty())
+	{
+		newText.insert((size_t)pos, insertText);
+	}
+	for (auto& ch : newText)
+	{
+		if (ch == L'\r' || ch == L'\n') ch = L' ';
+	}
+	if (isUndo)
+	{
+		this->SelectionStart = rec.selStartBefore;
+		this->SelectionEnd = rec.selEndBefore;
+	}
+	else
+	{
+		this->SelectionStart = rec.selStartAfter;
+		this->SelectionEnd = rec.selEndAfter;
+	}
+	this->SelectionStart = std::clamp(this->SelectionStart, 0, (int)newText.size());
+	this->SelectionEnd = std::clamp(this->SelectionEnd, 0, (int)newText.size());
+
+	this->isApplyingUndoRedo = false;
+	this->Text = newText;
+	this->OnTextChanged(this, oldStr, this->Text);
+}
+void TextBox::Undo()
+{
+	if (this->undoStack.empty()) return;
+	UndoRecord rec = this->undoStack.back();
+	this->undoStack.pop_back();
+	ApplyUndoRecord(rec, true);
+	this->redoStack.push_back(rec);
+}
+void TextBox::Redo()
+{
+	if (this->redoStack.empty()) return;
+	UndoRecord rec = this->redoStack.back();
+	this->redoStack.pop_back();
+	ApplyUndoRecord(rec, false);
+	this->undoStack.push_back(rec);
 }
 void TextBox::UpdateScroll(bool arrival)
 {
@@ -359,6 +499,23 @@ bool TextBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof
 	break;
 	case WM_KEYDOWN:
 	{
+		if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
+		{
+			if (wParam == 'Z')
+			{
+				this->Undo();
+				UpdateScroll();
+				this->PostRender();
+				return true;
+			}
+			if (wParam == 'Y')
+			{
+				this->Redo();
+				UpdateScroll();
+				this->PostRender();
+				return true;
+			}
+		}
 		auto pos = this->AbsLocation;
 		HIMC hImc = ImmGetContext(this->ParentForm->Handle);
 		COMPOSITIONFORM form;
@@ -495,45 +652,64 @@ bool TextBox::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof
 		{
 			if (OpenClipboard(this->ParentForm->Handle))
 			{
-				if (IsClipboardFormatAvailable(CF_TEXT))
+				if (IsClipboardFormatAvailable(CF_UNICODETEXT))
 				{
-					HANDLE hClip;
-					char* pBuf;
-					hClip = GetClipboardData(CF_TEXT);
-					pBuf = (char*)GlobalLock(hClip);
-					GlobalUnlock(hClip);
-					auto wc = Convert::string_to_wstring(pBuf);
-					this->InputText(wc);
+					HANDLE hClip = GetClipboardData(CF_UNICODETEXT);
+					const wchar_t* pBuf = (const wchar_t*)GlobalLock(hClip);
+					if (pBuf)
+					{
+						this->InputText(std::wstring(pBuf));
+						GlobalUnlock(hClip);
+					}
 					UpdateScroll();
+					CloseClipboard();
+				}
+				else if (IsClipboardFormatAvailable(CF_TEXT))
+				{
+					HANDLE hClip = GetClipboardData(CF_TEXT);
+					char* pBuf = (char*)GlobalLock(hClip);
+					if (pBuf)
+					{
+						GlobalUnlock(hClip);
+						auto wc = Convert::string_to_wstring(pBuf);
+						this->InputText(wc);
+					}
+					UpdateScroll();
+					CloseClipboard();
+				}
+				else
+				{
 					CloseClipboard();
 				}
 			}
 		}
 		else if (ch == 3)
 		{
-			std::string s = Convert::wstring_to_string(this->GetSelectedString().c_str());
+			std::wstring s = this->GetSelectedString();
 			if (s.size() > 0 && OpenClipboard(this->ParentForm->Handle))
 			{
 				EmptyClipboard();
-				HANDLE hData = GlobalAlloc(GMEM_MOVEABLE, s.size() + 1);
-				char* pData = (char*)GlobalLock(hData);
-				lstrcpyA(pData, s.c_str());
+				const size_t bytes = (s.size() + 1) * sizeof(wchar_t);
+				HANDLE hData = GlobalAlloc(GMEM_MOVEABLE, bytes);
+				wchar_t* pData = (wchar_t*)GlobalLock(hData);
+				memcpy(pData, s.c_str(), bytes);
 				GlobalUnlock(hData);
-				SetClipboardData(CF_TEXT, hData);
+				SetClipboardData(CF_UNICODETEXT, hData);
 				CloseClipboard();
 			}
 		}
 		else if (ch == 24)
 		{
-			std::string s = Convert::wstring_to_string(this->GetSelectedString().c_str());
+			std::wstring s = this->GetSelectedString();
 			if (s.size() > 0 && OpenClipboard(this->ParentForm->Handle))
 			{
 				EmptyClipboard();
-				HANDLE hData = GlobalAlloc(GMEM_MOVEABLE, s.size() + 1);
-				char* pData = (char*)GlobalLock(hData);
-				lstrcpyA(pData, s.c_str());
+				const size_t bytes = (s.size() + 1) * sizeof(wchar_t);
+				HANDLE hData = GlobalAlloc(GMEM_MOVEABLE, bytes);
+				wchar_t* pData = (wchar_t*)GlobalLock(hData);
+				memcpy(pData, s.c_str(), bytes);
 				GlobalUnlock(hData);
-				SetClipboardData(CF_TEXT, hData);
+				SetClipboardData(CF_UNICODETEXT, hData);
 				CloseClipboard();
 			}
 			this->InputBack();
