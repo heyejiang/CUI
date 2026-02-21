@@ -23,7 +23,7 @@ public:
 	List<TreeNode*> Children;
 	bool Expand = false; 
 	TreeNode(std::wstring text, std::shared_ptr<BitmapSource> image = nullptr);
-	ID2D1Bitmap* GetImageBitmap(D2DGraphics1* render);
+	ID2D1Bitmap* GetImageBitmap(D2DGraphics* render);
 	~TreeNode();
 	/** @brief 展开状态下可渲染的总节点数量（含子树）。 */
 	int UnfoldedCount();

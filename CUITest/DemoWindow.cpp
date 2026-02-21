@@ -23,7 +23,7 @@ std::shared_ptr<BitmapSource> ToBitmapFromSvg(const char* data)
 		percen = 4096.0f / maxv;
 	}
 	auto renderSource = BitmapSource::CreateEmpty(image->width * percen, image->height * percen);
-	auto subg = new D2DGraphics1(renderSource.get());
+	auto subg = new D2DGraphics(renderSource.get());
 	NSVGshape* shape;
 	NSVGpath* path;
 	subg->BeginRender();
@@ -52,7 +52,7 @@ std::shared_ptr<BitmapSource> ToBitmapFromSvg(const char* data)
 			skin->Close();
 		}
 
-		auto getSvgBrush = [](NSVGpaint paint, float opacity, D2DGraphics1* g) -> ID2D1Brush*
+		auto getSvgBrush = [](NSVGpaint paint, float opacity, D2DGraphics* g) -> ID2D1Brush*
 			{
 				const auto ic2fc = [](int colorInt, float opacity) -> D2D1_COLOR_F
 					{

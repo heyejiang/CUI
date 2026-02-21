@@ -1,9 +1,4 @@
 #pragma once
-
-/**
- * @file Form.h
- * @brief Form：顶层窗口与消息分发（Legacy）。
- */
 #include "Control.h"
 #include "Application.h"
 #include "Button.h"
@@ -32,6 +27,13 @@
 #include "NotifyIcon.h"
 #include "MediaPlayer.h"
 
+#if defined(_MSC_VER)
+#pragma comment(lib, "Dwmapi.lib")
+#endif
+
+struct IDCompositionDevice;
+struct IDCompositionVisual;
+class DCompLayeredHost;
 typedef Event<void(class Form* sender, int Id, int info)> CommandEvent;
 typedef Event<void(class Form*)> FormClosingEvent;
 typedef Event<void(class Form*)> FormClosedEvent;
@@ -51,6 +53,17 @@ typedef Event<void(class Form*)> FormLostFocusEvent;
 typedef Event<void(class Form*, List<std::wstring>)> FormDropFileEvent;
 typedef Event<void(class Form*, std::wstring)> FormDropTextEvent;
 typedef Event<void(class Form*, MouseEventArgs)> FormMouseClickEvent;
+
+/**
+ * @file Form.h
+ * @brief 顶层窗口(Form)定义：消息循环、控件管理、渲染与输入分发。
+ *
+ * Form 负责：
+ * - 维护 HWND 与窗口状态（大小/位置/标题栏按钮等）
+ * - 承载控件树（Controls），并进行命中测试/焦点管理
+ * - 触发布局（LayoutEngine）以及渲染（D2DGraphics）
+ * - 支持 Overlay 渲染与可选的 DirectComposition 容器（供 WebView2 等使用）
+ */
 class Form
 {
 private:
@@ -91,19 +104,6 @@ private:
 	UINT_PTR _animTimerId = 0xC001;
 	UINT _animIntervalMs = 0;
 	bool _hasRenderedOnce = false;
-	void SyncRenderSizeToClient();
-	// ---- DPI ----
-	UINT _dpi = 96;
-	UINT _contentDpi = 96; // 控件树/布局当前已应用的 DPI
-	bool _initialDpiApplied = false;
-	bool _initialWindowRectApplied = false;
-	int _headHeightBase96 = 24;
-	Font* _scaledDefaultFont = nullptr;
-	UINT _scaledDefaultFontDpi = 0;
-	Font* GetScaledDefaultFont();
-	void ApplyDpiChange(UINT newDpi);
-	void ScaleControlTreeForDpi(UINT fromDpi, UINT toDpi);
-	void EnsureInitialDpiApplied();
 	void InvalidateControl(class Control* c, int inflatePx = 2, bool immediate = false);
 	void InvalidateAnimatedControls(bool immediate = false);
 	static bool RectIntersects(const RECT& a, const RECT& b);
@@ -120,6 +120,19 @@ private:
 	class LayoutEngine* _layoutEngine = nullptr;
 	bool _needsLayout = false;
 	bool _resourcesCleaned = false;
+	// ---- DPI ----
+	UINT _dpi = 96;
+	UINT _contentDpi = 96; // 控件树/布局当前已应用的 DPI
+	bool _initialDpiApplied = false;
+	bool _initialWindowRectApplied = false;
+	int _headHeightBase96 = 24;
+	void SyncRenderSizeToClient();
+	Font* _scaledDefaultFont = nullptr;
+	UINT _scaledDefaultFontDpi = 0;
+	Font* GetScaledDefaultFont();
+	void ApplyDpiChange(UINT newDpi);
+	void ScaleControlTreeForDpi(UINT fromDpi, UINT toDpi);
+	void EnsureInitialDpiApplied();
 	// 鼠标 Hover/Leave 跟踪
 	bool _mouseLeaveTracking = false;
 	class Control* _hoverControl = NULL;
@@ -135,31 +148,45 @@ private:
 	void ResetImageCache();
 
 public:
+	/** @brief 鼠标滚轮事件（窗口级）。 */
 	FormMouseWheelEvent OnMouseWheel = FormMouseWheelEvent();
+	/** @brief 鼠标移动事件（窗口级）。 */
 	FormMouseMoveEvent OnMouseMove = FormMouseMoveEvent();
+	/** @brief 鼠标抬起事件（窗口级）。 */
 	FormMouseUpEvent OnMouseUp = FormMouseUpEvent();
+	/** @brief 鼠标按下事件（窗口级）。 */
 	FormMouseDownEvent OnMouseDown = FormMouseDownEvent();
 	MouseDoubleClickEvent OnMouseDoubleClick = MouseDoubleClickEvent();
 	FormMouseClickEvent OnMouseClick = FormMouseClickEvent();
 	MouseEnterEvent OnMouseEnter = MouseEnterEvent();
 	MouseLeavedEvent OnMouseLeaved = MouseLeavedEvent();
+	/** @brief 键盘抬起事件（窗口级）。 */
 	FormKeyUpEvent OnKeyUp = FormKeyUpEvent();
+	/** @brief 键盘按下事件（窗口级）。 */
 	FormKeyDownEvent OnKeyDown = FormKeyDownEvent();
+	/** @brief 绘制事件（窗口级）。 */
 	FormPaintEvent OnPaint = FormPaintEvent();
 	CloseEvent OnClose = CloseEvent();
 	FormMovedEvent OnMoved = FormMovedEvent();
 	FormSizeChangedEvent OnSizeChanged = FormSizeChangedEvent();
+	/** @brief 标题文本变化事件。 */
 	FormTextChangedEvent OnTextChanged = FormTextChangedEvent();
+	/** @brief 字符输入事件（已解析为 wchar_t）。 */
 	FormCharInputEvent OnCharInput = FormCharInputEvent();
 	FormGotFocusEvent OnGotFocus = FormGotFocusEvent();
 	FormLostFocusEvent OnLostFocus = FormLostFocusEvent();
+	/** @brief 文件拖放事件。 */
 	FormDropFileEvent OnDropFile = FormDropFileEvent();
+	/** @brief 文本拖放事件。 */
 	FormDropTextEvent OnDropText = FormDropTextEvent();
+	/** @brief 关闭中事件（允许外部拦截/取消关闭）。 */
 	FormClosingEvent OnFormClosing = FormClosingEvent();
+	/** @brief 已关闭事件。 */
 	FormClosedEvent OnFormClosed = FormClosedEvent();
 
 	CommandEvent OnCommand;
 
+	/** @brief Win32 窗口句柄。 */
 	HWND Handle = NULL;
 	bool MinBox = true;
 	bool MaxBox = true;
@@ -167,8 +194,10 @@ public:
 	bool VisibleHead = true;
 	bool CenterTitle = true;
 	bool ControlChanged = false;
+	/** @brief 当前具有键盘焦点的控件。 */
 	class Control* Selected = NULL;
 	class Control* UnderMouse = NULL;
+	/** @brief 顶层控件集合（通常包含布局容器与各控件）。 */
 	List<class Control*> Controls = List<class Control*>();
 	// 置顶控件：最多只允许一个（用于 ComboBox 下拉、临时浮层等）
 	class Control* ForegroundControl = NULL;
@@ -176,8 +205,10 @@ public:
 	class Menu* MainMenu = NULL;
 	// 状态栏：单独管理（置底但置顶于普通控件；需要独立渲染与消息处理）
 	class StatusBar* MainStatusBar = NULL;
+	/** @brief 主渲染器（控件树渲染）。 */
 	D2DGraphics* Render;
-	D2DGraphics* OverlayRender = nullptr;
+	bool _recoveringDeviceLost = false;
+	void RecoverRenderIfNeeded();
 	int HeadHeight = 24;
 	D2D1_COLOR_F BackColor = Colors::WhiteSmoke;
 	D2D1_COLOR_F ForeColor = Colors::Black;
@@ -220,14 +251,34 @@ public:
 	SET(bool, AllowResize);
 
 	HICON Icon = NULL;
+	/**
+	 * @brief 创建一个顶层窗口。
+	 * @param _text 窗口标题。
+	 * @param _location 初始位置。
+	 * @param _size 初始大小。
+	 */
 	Form(std::wstring _text = L"NativeWindow", POINT _location = { 0,0 }, SIZE _size = { 600,400 });
 	~Form();
 	// 统一设置键盘焦点控件（Selected），并触发控件 Got/LostFocus。
 	void SetSelectedControl(class Control* value, bool postRender = true);
+	/** @brief 以非模态方式显示窗口。 */
 	void Show();
+	/** @brief 以模态方式显示窗口。 */
 	void ShowDialog(HWND parent = NULL);
+	/** @brief 请求关闭窗口。 */
 	void Close();
+	/** @brief 根据当前鼠标位置刷新窗口光标显示。 */
 	void UpdateCursorFromCurrentMouse();
+
+	// WebView2 Composition 支持：给 WebBrowser 提供 DirectComposition 的容器层
+	/**
+	 * @brief 获取 DirectComposition 设备（用于 WebView2/Composition 场景）。
+	 */
+	IDCompositionDevice* GetDCompDevice() const;
+	/** @brief 获取用于承载 Web 组件的容器 Visual。 */
+	IDCompositionVisual* GetWebContainerVisual() const;
+	/** @brief 提交 Composition 更改。 */
+	void CommitComposition();
 
 	template<typename T>
 	T AddControl(T c)
@@ -264,12 +315,24 @@ public:
 		_needsLayout = true;
 		return c;
 	}
+	/**
+	 * @brief 移除一个顶层控件。
+	 * @return true 表示成功移除。
+	 */
 	bool RemoveControl(Control* c);
 	virtual bool ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof);
 	virtual bool Update(bool force = false);
 	virtual bool UpdateDirtyRect(const RECT& dirty, bool force = false);
 	virtual bool ForceUpdate();
+	/**
+	 * @brief 使整个窗口区域失效（触发重绘）。
+	 * @param immediate true 表示尽快立即刷新。
+	 */
 	void Invalidate(bool immediate = false);
+	/**
+	 * @brief 使窗口指定区域失效（触发重绘）。
+	 * @param rc 需要重绘的矩形（客户区坐标）。
+	 */
 	void Invalidate(const RECT& rc, bool immediate = false);
 	void Invalidate(D2D1_RECT_F rc, bool immediate = false);
 	virtual void RenderImage();

@@ -37,7 +37,7 @@ CellValue::CellValue(unsigned __int64 tag) : Text(L""), Tag(tag), Image(nullptr)
 {
 }
 
-ID2D1Bitmap* CellValue::GetImageBitmap(D2DGraphics1* render)
+ID2D1Bitmap* CellValue::GetImageBitmap(D2DGraphics* render)
 {
 	if (!render || !Image)
 		return nullptr;

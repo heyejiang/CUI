@@ -1,6 +1,6 @@
 #include "TreeView.h"
 #include "Form.h"
-static void renderNodes(TreeView* tree, D2DGraphics1* d2d, float x, float y, float w, float h, float itemHeight, int scrollIndex, int& currindex, int sunLevel, List<TreeNode*>& Children)
+static void renderNodes(TreeView* tree, D2DGraphics* d2d, float x, float y, float w, float h, float itemHeight, int scrollIndex, int& currindex, int sunLevel, List<TreeNode*>& Children)
 {
 	float baseLeft = sunLevel * itemHeight + 3.5f + x;
 	for (auto c : Children)
@@ -109,7 +109,7 @@ TreeNode::TreeNode(std::wstring text, std::shared_ptr<BitmapSource> image)
 	this->Children = List<TreeNode*>();
 }
 
-ID2D1Bitmap* TreeNode::GetImageBitmap(D2DGraphics1* render)
+ID2D1Bitmap* TreeNode::GetImageBitmap(D2DGraphics* render)
 {
 	if (!render || !Image)
 		return nullptr;

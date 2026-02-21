@@ -15,6 +15,7 @@ namespace
 
 	static UINT QueryDpiForWindow(HWND hwnd)
 	{
+		// Prefer Win10+ GetDpiForWindow
 		auto user32 = GetModuleHandleW(L"user32.dll");
 		if (user32)
 		{
@@ -43,25 +44,30 @@ namespace
 		if (done) return;
 		done = true;
 
+		// 1) Win10+ Per-Monitor V2
 		if (auto user32 = GetModuleHandleW(L"user32.dll"))
 		{
 			typedef BOOL(WINAPI* SetProcessDpiAwarenessContext_t)(HANDLE);
 			auto pSetCtx = (SetProcessDpiAwarenessContext_t)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
 			if (pSetCtx)
 			{
+				// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = (HANDLE)-4
 				HANDLE PMV2 = (HANDLE)-4;
 				if (pSetCtx(PMV2)) return;
+				// fallback to PER_MONITOR_AWARE = (HANDLE)-3
 				HANDLE PMV1 = (HANDLE)-3;
 				if (pSetCtx(PMV1)) return;
 			}
 		}
 
+		// 2) Win8.1+ Shcore SetProcessDpiAwareness
 		if (auto shcore = LoadLibraryW(L"Shcore.dll"))
 		{
 			typedef HRESULT(WINAPI* SetProcessDpiAwareness_t)(int);
 			auto pSet = (SetProcessDpiAwareness_t)GetProcAddress(shcore, "SetProcessDpiAwareness");
 			if (pSet)
 			{
+				// PROCESS_PER_MONITOR_DPI_AWARE = 2
 				if (SUCCEEDED(pSet(2)))
 				{
 					FreeLibrary(shcore);
@@ -71,6 +77,7 @@ namespace
 			FreeLibrary(shcore);
 		}
 
+		// 3) Vista+ system DPI aware
 		if (auto user32 = GetModuleHandleW(L"user32.dll"))
 		{
 			typedef BOOL(WINAPI* SetProcessDPIAware_t)();
@@ -80,6 +87,7 @@ namespace
 		}
 	}
 }
+
 Dictionary<HWND, class Form*>  Application::Forms = Dictionary<HWND, class Form*>();
 
 std::string Application::ExecutablePath()

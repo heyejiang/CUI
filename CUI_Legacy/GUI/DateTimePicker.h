@@ -24,10 +24,19 @@ private:
 		PrevMonth,
 		NextMonth,
 		DayCell,
+		HourField,
+		MinuteField,
 		HourUp,
 		HourDown,
 		MinuteUp,
 		MinuteDown
+	};
+
+	enum class EditField : uint8_t
+	{
+		None,
+		Hour,
+		Minute
 	};
 
 	struct LayoutMetrics
@@ -49,6 +58,7 @@ private:
 		float weekTop = 0.0f;
 		float weekHeight = 0.0f;
 		float gridTop = 0.0f;
+		int gridRows = 6;
 		float cellWidth = 0.0f;
 		float cellHeight = 0.0f;
 
@@ -72,6 +82,8 @@ private:
 	bool _allowTime = true;
 	HitPart _hoverPart = HitPart::None;
 	int _hoverDay = -1;
+	EditField _editField = EditField::None;
+	std::wstring _editBuffer;
 
 	void EnsureShowFlags();
 	void SyncViewFromValue();
@@ -82,7 +94,14 @@ private:
 	void AdjustHour(int delta);
 	void AdjustMinute(int delta);
 	void SetValueInternal(const SYSTEMTIME& value, bool fireEvent);
+	void BeginTimeEdit(EditField field);
+	void CommitTimeEdit(bool keepEditing);
+	void CancelTimeEdit();
+	bool HandleTimeEditChar(wchar_t ch);
+	std::wstring GetTimeEditText(EditField field, int value) const;
+	bool IsInlineTimeMode() const;
 	bool GetLayoutMetrics(LayoutMetrics& out);
+	bool GetInlineTimeLayout(LayoutMetrics& out);
 	bool HitTestDayCell(const LayoutMetrics& layout, int xof, int yof, int& outDay) const;
 	void UpdateHoverState(int xof, int yof);
 	HitPart HitTestPart(const LayoutMetrics& layout, int xof, int yof, int& outDay) const;

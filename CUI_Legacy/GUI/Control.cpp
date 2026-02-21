@@ -341,20 +341,6 @@ ID2D1Bitmap* Control::EnsureImageCache()
 	this->_imageCache.Attach(bmp);
 	return this->_imageCache.Get();
 }
-
-void Control::OnRenderTargetRecreated()
-{
-	// 递归通知子控件（部分控件可能会缓存更多 device dependent 资源）。
-	for (int i = 0; i < this->Count; i++)
-	{
-		auto c = this->operator[](i);
-		if (c) c->OnRenderTargetRecreated();
-	}
-
-	// 清空缓存的 bitmap（保留 BitmapSource 以便重建）。
-	this->_imageCache.Reset();
-	this->_imageCacheTarget = nullptr;
-}
 void Control::RenderImage()
 {
 	auto* bmp = this->EnsureImageCache();
@@ -636,6 +622,14 @@ SET_CPP(Control, SIZE, MaxSize)
 SIZE Control::MeasureCore(SIZE availableSize)
 {
 	SIZE desired = this->_size;
+	if (this->ParentForm)
+	{
+		SIZE actualSize = this->ActualSize();
+		if (actualSize.cx != desired.cx || actualSize.cy != desired.cy)
+		{
+			desired = actualSize;
+		}
+	}
 
 	// 应用 Padding
 	desired.cx += (LONG)(_padding.Left + _padding.Right);

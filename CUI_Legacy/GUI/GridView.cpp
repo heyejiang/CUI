@@ -92,21 +92,6 @@ GridView::~GridView()
 	this->HeadFont = NULL;
 }
 
-void GridView::OnRenderTargetRecreated()
-{
-	Control::OnRenderTargetRecreated();
-	for (auto& r : this->Rows)
-	{
-		for (int i = 0; i < r.Cells.Count; i++)
-		{
-			r.Cells[i].ImageCache.Reset();
-			r.Cells[i].ImageCacheTarget = nullptr;
-			r.Cells[i].ImageCacheSource = nullptr;
-		}
-	}
-	this->PostRender();
-}
-
 float GridView::GetTotalColumnsWidth()
 {
 	float sum = 0.0f;

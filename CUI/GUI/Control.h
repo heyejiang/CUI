@@ -8,7 +8,7 @@
 #include <CppUtils/Graphics/Colors.h>
 #include <CppUtils/Graphics/Font.h>
 #include <CppUtils/Graphics/Factory.h>
-#include <CppUtils/Graphics/Graphics1.h>
+#include <CppUtils/Graphics/Graphics.h>
 
 /*---如果Utils和Graphics被编译成lib则引用外部头文件---*/
 // (using external CppUtils)

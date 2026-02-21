@@ -1,7 +1,7 @@
 #include "DCompLayeredHost.h"
 /*---如果Utils和Graphics源代码包含在此项目中则直接引用本地项目---*/
 //#define _LIB
-#include <CppUtils/Graphics/Graphics1.h>
+#include <CppUtils/Graphics/Graphics.h>
 /*---如果Utils和Graphics被编译成lib则引用外部头文件---*/
 #include <algorithm>
 #include <d3d11.h>
@@ -27,7 +27,7 @@ HRESULT DCompLayeredHost::Initialize()
 	UINT width = std::max<UINT>(1, (UINT)(rc.right - rc.left));
 	UINT height = std::max<UINT>(1, (UINT)(rc.bottom - rc.top));
 
-	ComPtr<IDXGIDevice> dxgiDevice = Graphics1_GetSharedDXGIDevice();
+	ComPtr<IDXGIDevice> dxgiDevice = Graphics_GetSharedDXGIDevice();
 	if (!dxgiDevice) return E_FAIL;
 
 	HRESULT hr = ::DCompositionCreateDevice(dxgiDevice.Get(), IID_PPV_ARGS(&_dcompDevice));
@@ -68,7 +68,7 @@ HRESULT DCompLayeredHost::Initialize()
 
 HRESULT DCompLayeredHost::CreateSwapChains(UINT width, UINT height)
 {
-	ComPtr<IDXGIDevice> dxgiDevice = Graphics1_GetSharedDXGIDevice();
+	ComPtr<IDXGIDevice> dxgiDevice = Graphics_GetSharedDXGIDevice();
 	if (!dxgiDevice) return E_FAIL;
 	ComPtr<IDXGIAdapter> adapter;
 	HRESULT hr = dxgiDevice->GetAdapter(&adapter);
@@ -93,9 +93,9 @@ HRESULT DCompLayeredHost::CreateSwapChains(UINT width, UINT height)
 
 	ComPtr<IDXGISwapChain1> baseSc;
 	ComPtr<IDXGISwapChain1> overlaySc;
-	hr = factory->CreateSwapChainForComposition(Graphics1_GetSharedD3DDevice(), &baseDesc, nullptr, &baseSc);
+	hr = factory->CreateSwapChainForComposition(Graphics_GetSharedD3DDevice(), &baseDesc, nullptr, &baseSc);
 	if (FAILED(hr)) return hr;
-	hr = factory->CreateSwapChainForComposition(Graphics1_GetSharedD3DDevice(), &overlayDesc, nullptr, &overlaySc);
+	hr = factory->CreateSwapChainForComposition(Graphics_GetSharedD3DDevice(), &overlayDesc, nullptr, &overlaySc);
 	if (FAILED(hr)) return hr;
 
 	_baseSwapChain = baseSc;

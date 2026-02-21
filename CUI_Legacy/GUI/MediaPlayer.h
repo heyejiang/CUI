@@ -304,7 +304,6 @@ public:
 
 	static void ConvertNV12ToBGRA(const uint8_t* nv12, size_t nv12Bytes, UINT32 nv12Stride, UINT32 srcW, UINT32 srcH, UINT32 cropX, UINT32 cropY, UINT32 w, UINT32 h, std::vector<uint8_t>& outBGRA);
 	virtual UIClass Type() override;
-	void OnRenderTargetRecreated() override;
 	void Update() override;
 	bool ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, int yof) override;
 

@@ -62,7 +62,7 @@ typedef Event<void(class Form*, MouseEventArgs)> FormMouseClickEvent;
  * Form 负责：
  * - 维护 HWND 与窗口状态（大小/位置/标题栏按钮等）
  * - 承载控件树（Controls），并进行命中测试/焦点管理
- * - 触发布局（LayoutEngine）以及渲染（D2DGraphics1）
+ * - 触发布局（LayoutEngine）以及渲染（D2DGraphics）
  * - 支持 Overlay 渲染与可选的 DirectComposition 容器（供 WebView2 等使用）
  */
 class Form
@@ -207,9 +207,9 @@ public:
 	// 状态栏：单独管理（置底但置顶于普通控件；需要独立渲染与消息处理）
 	class StatusBar* MainStatusBar = NULL;
 	/** @brief 主渲染器（控件树渲染）。 */
-	D2DGraphics1* Render;
+	D2DGraphics* Render;
 	/** @brief 覆盖层渲染器（用于前景控件/临时浮层等）。 */
-	D2DGraphics1* OverlayRender = nullptr;
+	D2DGraphics* OverlayRender = nullptr;
 	class DCompLayeredHost* _dcompHost = nullptr;
 	bool _recoveringDeviceLost = false;
 	void RecoverRenderIfNeeded();

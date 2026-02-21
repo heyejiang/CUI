@@ -90,7 +90,7 @@ SET_CPP(DateTimePicker, bool, AllowTimeSelection)
 
 SIZE DateTimePicker::ActualSize()
 {
-	if (!Expand)
+	if (!Expand || IsInlineTimeMode())
 		return this->Size;
 
 	LayoutMetrics layout{};
@@ -105,13 +105,31 @@ SIZE DateTimePicker::ActualSize()
 CursorKind DateTimePicker::QueryCursor(int xof, int yof)
 {
 	if (!this->Enable) return CursorKind::Arrow;
-	if (yof >= 0 && yof <= this->Height) return CursorKind::Hand;
+	if (yof >= 0 && yof <= this->Height)
+	{
+		if (IsInlineTimeMode())
+		{
+			LayoutMetrics layout{};
+			int day = -1;
+			if (GetInlineTimeLayout(layout))
+			{
+				auto part = HitTestPart(layout, xof, yof, day);
+				if (part == HitPart::HourField || part == HitPart::MinuteField)
+					return CursorKind::IBeam;
+				if (part != HitPart::None)
+					return CursorKind::Hand;
+			}
+		}
+		return CursorKind::Hand;
+	}
 	if (!Expand) return CursorKind::Arrow;
 
 	LayoutMetrics layout{};
 	if (!GetLayoutMetrics(layout)) return CursorKind::Arrow;
 	int day = -1;
 	auto part = HitTestPart(layout, xof, yof, day);
+	if (part == HitPart::HourField || part == HitPart::MinuteField)
+		return CursorKind::IBeam;
 	if (part != HitPart::None)
 		return CursorKind::Hand;
 	return CursorKind::Arrow;
@@ -129,6 +147,7 @@ void DateTimePicker::Update()
 
 	bool isUnderMouse = this->ParentForm->UnderMouse == this;
 	bool isSelected = this->ParentForm->Selected == this;
+	bool inlineTime = IsInlineTimeMode();
 
 	d2d->PushDrawRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top);
 	{
@@ -140,36 +159,120 @@ void DateTimePicker::Update()
 		d2d->FillRoundRect((float)abs.x, (float)abs.y, (float)this->Width, (float)this->Height, baseColor, round);
 
 		auto font = this->Font;
-		auto textSize = font->GetTextSize(this->Text);
-		float textX = (float)abs.x + 10.0f;
-		float textY = (float)abs.y + std::max(0.0f, ((float)this->Height - textSize.height) * 0.5f);
-		d2d->DrawString(this->Text, textX, textY, this->ForeColor, font);
-
-		// 下拉箭头
+		if (inlineTime)
 		{
-			const float h = (float)this->Height;
-			float iconSize = h * 0.35f;
-			if (iconSize < 8.0f) iconSize = 8.0f;
-			if (iconSize > 12.0f) iconSize = 12.0f;
-			const float padRight = 10.0f;
-			const float cx = (float)abs.x + (float)this->Width - padRight - iconSize * 0.5f;
-			const float cy = (float)abs.y + h * 0.5f;
-			const float half = iconSize * 0.5f;
-			const float triH = iconSize * 0.6f;
-			D2D1_TRIANGLE tri{};
-			if (this->Expand)
+			LayoutMetrics layout{};
+			if (GetInlineTimeLayout(layout))
 			{
-				tri.point1 = D2D1::Point2F(cx - half, cy + triH * 0.5f);
-				tri.point2 = D2D1::Point2F(cx + half, cy + triH * 0.5f);
-				tri.point3 = D2D1::Point2F(cx, cy - triH * 0.5f);
+				auto toAbs = [&](D2D1_RECT_F r) -> D2D1_RECT_F {
+					r.left += abs.x; r.right += abs.x;
+					r.top += abs.y; r.bottom += abs.y;
+					return r;
+					};
+
+				auto drawTimeBox = [&](D2D1_RECT_F rect, bool hoverUp, bool hoverDown, bool isEditing)
+					{
+						auto absRect = toAbs(rect);
+						d2d->FillRoundRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top, this->PanelBackColor, 5.0f);
+						D2D1_COLOR_F borderColor = isEditing ? this->FocusBorderColor : this->DropBorderColor;
+						float borderWidth = isEditing ? 1.5f : 1.0f;
+						d2d->DrawRoundRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top, borderColor, borderWidth, 5.0f);
+						if (hoverUp)
+							d2d->FillRect(absRect.right - 16.0f, absRect.top, 16.0f, (absRect.bottom - absRect.top) * 0.5f, this->HoverColor);
+						if (hoverDown)
+							d2d->FillRect(absRect.right - 16.0f, absRect.top + (absRect.bottom - absRect.top) * 0.5f, 16.0f, (absRect.bottom - absRect.top) * 0.5f, this->HoverColor);
+					};
+
+				drawTimeBox(layout.hourRect, _hoverPart == HitPart::HourUp, _hoverPart == HitPart::HourDown, _editField == EditField::Hour);
+				drawTimeBox(layout.minuteRect, _hoverPart == HitPart::MinuteUp, _hoverPart == HitPart::MinuteDown, _editField == EditField::Minute);
+
+				std::wstring hourText = GetTimeEditText(EditField::Hour, _value.wHour);
+				std::wstring minuteText = GetTimeEditText(EditField::Minute, _value.wMinute);
+				auto hSize = font->GetTextSize(hourText);
+				auto mSize = font->GetTextSize(minuteText);
+
+				auto hourAbs = toAbs(layout.hourRect);
+				auto minuteAbs = toAbs(layout.minuteRect);
+				float hx = hourAbs.left + (hourAbs.right - hourAbs.left - 16.0f - hSize.width) * 0.5f;
+				float hy = hourAbs.top + (hourAbs.bottom - hourAbs.top - hSize.height) * 0.5f;
+				float mx = minuteAbs.left + (minuteAbs.right - minuteAbs.left - 16.0f - mSize.width) * 0.5f;
+				float my = minuteAbs.top + (minuteAbs.bottom - minuteAbs.top - mSize.height) * 0.5f;
+				d2d->DrawString(hourText, hx, hy, this->ForeColor, font);
+				d2d->DrawString(minuteText, mx, my, this->ForeColor, font);
+
+				auto drawArrow = [&](float cx, float cy, bool up)
+					{
+						const float half = 4.5f;
+						D2D1_TRIANGLE tri{};
+						if (up)
+						{
+							tri.point1 = D2D1::Point2F(cx - half, cy + half);
+							tri.point2 = D2D1::Point2F(cx + half, cy + half);
+							tri.point3 = D2D1::Point2F(cx, cy - half);
+						}
+						else
+						{
+							tri.point1 = D2D1::Point2F(cx - half, cy - half);
+							tri.point2 = D2D1::Point2F(cx + half, cy - half);
+							tri.point3 = D2D1::Point2F(cx, cy + half);
+						}
+						d2d->FillTriangle(tri, this->SecondaryTextColor);
+					};
+
+				float hourRight = hourAbs.right - 8.0f;
+				float minuteRight = minuteAbs.right - 8.0f;
+				drawArrow(hourRight, hourAbs.top + (hourAbs.bottom - hourAbs.top) * 0.32f, true);
+				drawArrow(hourRight, hourAbs.top + (hourAbs.bottom - hourAbs.top) * 0.68f, false);
+				drawArrow(minuteRight, minuteAbs.top + (minuteAbs.bottom - minuteAbs.top) * 0.32f, true);
+				drawArrow(minuteRight, minuteAbs.top + (minuteAbs.bottom - minuteAbs.top) * 0.68f, false);
+
+				std::wstring colon = L":";
+				auto colonSize = font->GetTextSize(colon);
+				float colonX = abs.x + layout.contentLeft + layout.contentWidth * 0.5f - colonSize.width * 0.5f;
+				float colonY = abs.y + layout.timeTop + (layout.timeHeight - colonSize.height) * 0.5f;
+				d2d->DrawString(colon, colonX, colonY, this->SecondaryTextColor, font);
 			}
 			else
 			{
-				tri.point1 = D2D1::Point2F(cx - half, cy - triH * 0.5f);
-				tri.point2 = D2D1::Point2F(cx + half, cy - triH * 0.5f);
-				tri.point3 = D2D1::Point2F(cx, cy + triH * 0.5f);
+				auto textSize = font->GetTextSize(this->Text);
+				float textX = (float)abs.x + 10.0f;
+				float textY = (float)abs.y + std::max(0.0f, ((float)this->Height - textSize.height) * 0.5f);
+				d2d->DrawString(this->Text, textX, textY, this->ForeColor, font);
 			}
-			d2d->FillTriangle(tri, this->ForeColor);
+		}
+		else
+		{
+			auto textSize = font->GetTextSize(this->Text);
+			float textX = (float)abs.x + 10.0f;
+			float textY = (float)abs.y + std::max(0.0f, ((float)this->Height - textSize.height) * 0.5f);
+			d2d->DrawString(this->Text, textX, textY, this->ForeColor, font);
+
+			// 下拉箭头
+			{
+				const float h = (float)this->Height;
+				float iconSize = h * 0.35f;
+				if (iconSize < 8.0f) iconSize = 8.0f;
+				if (iconSize > 12.0f) iconSize = 12.0f;
+				const float padRight = 10.0f;
+				const float cx = (float)abs.x + (float)this->Width - padRight - iconSize * 0.5f;
+				const float cy = (float)abs.y + h * 0.5f;
+				const float half = iconSize * 0.5f;
+				const float triH = iconSize * 0.6f;
+				D2D1_TRIANGLE tri{};
+				if (this->Expand)
+				{
+					tri.point1 = D2D1::Point2F(cx - half, cy + triH * 0.5f);
+					tri.point2 = D2D1::Point2F(cx + half, cy + triH * 0.5f);
+					tri.point3 = D2D1::Point2F(cx, cy - triH * 0.5f);
+				}
+				else
+				{
+					tri.point1 = D2D1::Point2F(cx - half, cy - triH * 0.5f);
+					tri.point2 = D2D1::Point2F(cx + half, cy - triH * 0.5f);
+					tri.point3 = D2D1::Point2F(cx, cy + triH * 0.5f);
+				}
+				d2d->FillTriangle(tri, this->ForeColor);
+			}
 		}
 
 		D2D1_COLOR_F borderColor = isSelected ? FocusBorderColor : this->BolderColor;
@@ -177,7 +280,7 @@ void DateTimePicker::Update()
 			(float)this->Width - this->Boder, (float)this->Height - this->Boder,
 			borderColor, this->Boder, round);
 
-		if (this->Expand)
+		if (this->Expand && !inlineTime)
 		{
 			LayoutMetrics layout{};
 			if (GetLayoutMetrics(layout))
@@ -264,7 +367,7 @@ void DateTimePicker::Update()
 					int first = FirstWeekday(_viewYear, _viewMonth);
 					SYSTEMTIME today{};
 					::GetLocalTime(&today);
-					for (int i = 0; i < 42; i++)
+				for (int i = 0; i < layout.gridRows * 7; i++)
 					{
 						int day = i - first + 1;
 						if (day < 1 || day > days) continue;
@@ -295,22 +398,24 @@ void DateTimePicker::Update()
 
 				if (layout.showTime)
 				{
-					auto drawTimeBox = [&](D2D1_RECT_F rect, bool hoverUp, bool hoverDown)
+					auto drawTimeBox = [&](D2D1_RECT_F rect, bool hoverUp, bool hoverDown, bool isEditing)
 						{
 							auto absRect = toAbs(rect);
 							d2d->FillRoundRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top, this->PanelBackColor, 5.0f);
-							d2d->DrawRoundRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top, this->DropBorderColor, 1.0f, 5.0f);
+							D2D1_COLOR_F borderColor = isEditing ? this->FocusBorderColor : this->DropBorderColor;
+							float borderWidth = isEditing ? 1.5f : 1.0f;
+							d2d->DrawRoundRect(absRect.left, absRect.top, absRect.right - absRect.left, absRect.bottom - absRect.top, borderColor, borderWidth, 5.0f);
 							if (hoverUp)
 								d2d->FillRect(absRect.right - 16.0f, absRect.top, 16.0f, (absRect.bottom - absRect.top) * 0.5f, this->HoverColor);
 							if (hoverDown)
 								d2d->FillRect(absRect.right - 16.0f, absRect.top + (absRect.bottom - absRect.top) * 0.5f, 16.0f, (absRect.bottom - absRect.top) * 0.5f, this->HoverColor);
 						};
 
-					drawTimeBox(layout.hourRect, _hoverPart == HitPart::HourUp, _hoverPart == HitPart::HourDown);
-					drawTimeBox(layout.minuteRect, _hoverPart == HitPart::MinuteUp, _hoverPart == HitPart::MinuteDown);
+					drawTimeBox(layout.hourRect, _hoverPart == HitPart::HourUp, _hoverPart == HitPart::HourDown, _editField == EditField::Hour);
+					drawTimeBox(layout.minuteRect, _hoverPart == HitPart::MinuteUp, _hoverPart == HitPart::MinuteDown, _editField == EditField::Minute);
 
-					std::wstring hourText = StringHelper::Format(L"%02d", _value.wHour);
-					std::wstring minuteText = StringHelper::Format(L"%02d", _value.wMinute);
+					std::wstring hourText = GetTimeEditText(EditField::Hour, _value.wHour);
+					std::wstring minuteText = GetTimeEditText(EditField::Minute, _value.wMinute);
 					auto hSize = font->GetTextSize(hourText);
 					auto mSize = font->GetTextSize(minuteText);
 
@@ -390,10 +495,11 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 	{
 	case WM_MOUSEWHEEL:
 	{
-		if (this->Expand)
+		if (this->Expand || IsInlineTimeMode())
 		{
 			LayoutMetrics layout{};
-			if (GetLayoutMetrics(layout))
+			bool hasLayout = this->Expand ? GetLayoutMetrics(layout) : GetInlineTimeLayout(layout);
+			if (hasLayout)
 			{
 				int delta = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
 				if (layout.showTime && yof >= (int)layout.timeTop)
@@ -413,7 +519,7 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 	case WM_MOUSEMOVE:
 	{
 		this->ParentForm->UnderMouse = this;
-		if (this->Expand)
+		if (this->Expand || IsInlineTimeMode())
 			UpdateHoverState(xof, yof);
 		MouseEventArgs event_obj = MouseEventArgs(MouseButtons::None, 0, xof, yof, HIWORD(wParam));
 		this->OnMouseMove(this, event_obj);
@@ -433,7 +539,54 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 	{
 		if (WM_LBUTTONUP == message && this->ParentForm && this->ParentForm->Selected == this)
 		{
-			if (!this->Expand)
+			if (IsInlineTimeMode())
+			{
+				if (yof >= 0 && yof <= this->Height)
+				{
+					LayoutMetrics layout{};
+					int day = -1;
+					if (GetInlineTimeLayout(layout))
+					{
+						auto part = HitTestPart(layout, xof, yof, day);
+						if (_editField != EditField::None)
+						{
+							bool sameField = (part == HitPart::HourField && _editField == EditField::Hour) ||
+								(part == HitPart::MinuteField && _editField == EditField::Minute);
+							if (!sameField)
+								CommitTimeEdit(false);
+						}
+						switch (part)
+						{
+						case HitPart::HourField:
+							BeginTimeEdit(EditField::Hour);
+							break;
+						case HitPart::MinuteField:
+							BeginTimeEdit(EditField::Minute);
+							break;
+						case HitPart::HourUp:
+							AdjustHour(1);
+							break;
+						case HitPart::HourDown:
+							AdjustHour(-1);
+							break;
+						case HitPart::MinuteUp:
+							AdjustMinute(1);
+							break;
+						case HitPart::MinuteDown:
+							AdjustMinute(-1);
+							break;
+						default:
+							break;
+						}
+					}
+				}
+				else
+				{
+					if (_editField != EditField::None)
+						CommitTimeEdit(false);
+				}
+			}
+			else if (!this->Expand)
 			{
 				if (yof >= 0 && yof <= this->Height)
 					SetExpanded(true);
@@ -451,6 +604,13 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 					if (GetLayoutMetrics(layout))
 					{
 						auto part = HitTestPart(layout, xof, yof, day);
+						if (_editField != EditField::None)
+						{
+							bool sameField = (part == HitPart::HourField && _editField == EditField::Hour) ||
+								(part == HitPart::MinuteField && _editField == EditField::Minute);
+							if (!sameField)
+								CommitTimeEdit(false);
+						}
 						switch (part)
 						{
 						case HitPart::ToggleDate:
@@ -477,6 +637,12 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 									SetExpanded(false);
 							}
 							break;
+						case HitPart::HourField:
+							BeginTimeEdit(EditField::Hour);
+							break;
+						case HitPart::MinuteField:
+							BeginTimeEdit(EditField::Minute);
+							break;
 						case HitPart::HourUp:
 							AdjustHour(1);
 							break;
@@ -497,7 +663,12 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 			}
 		}
 		if (this->ParentForm)
-			this->ParentForm->Selected = NULL;
+		{
+			if (_editField == EditField::None)
+				this->ParentForm->Selected = NULL;
+			else
+				this->ParentForm->Selected = this;
+		}
 		MouseEventArgs event_obj = MouseEventArgs(FromParamToMouseButtons(message), 0, xof, yof, HIWORD(wParam));
 		this->OnMouseUp(this, event_obj);
 		this->PostRender();
@@ -511,8 +682,21 @@ bool DateTimePicker::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, 
 	break;
 	case WM_KEYDOWN:
 	{
+		if (_editField != EditField::None && wParam == VK_ESCAPE)
+		{
+			CancelTimeEdit();
+		}
 		KeyEventArgs event_obj = KeyEventArgs((Keys)(wParam | 0));
 		this->OnKeyDown(this, event_obj);
+	}
+	break;
+	case WM_CHAR:
+	{
+		if ((this->Expand || IsInlineTimeMode()) && _showTime && _allowTime)
+		{
+			if (HandleTimeEditChar((wchar_t)wParam))
+				return true;
+		}
 	}
 	break;
 	case WM_KEYUP:
@@ -541,6 +725,10 @@ void DateTimePicker::EnsureShowFlags()
 			_showDate = true;
 		}
 	}
+	if (!_showTime || !_allowTime)
+		CommitTimeEdit(false);
+	if (IsInlineTimeMode() && Expand)
+		SetExpanded(false);
 }
 
 void DateTimePicker::SyncViewFromValue()
@@ -616,6 +804,129 @@ void DateTimePicker::AdjustMinute(int delta)
 	SetValueInternal(nv, true);
 }
 
+void DateTimePicker::BeginTimeEdit(EditField field)
+{
+	if (!_allowTime || !_showTime) return;
+	if (_editField != field)
+		_editBuffer.clear();
+	_editField = field;
+	if (this->ParentForm)
+		this->ParentForm->Selected = this;
+	PostRender();
+}
+
+void DateTimePicker::CommitTimeEdit(bool keepEditing)
+{
+	if (_editField == EditField::None) return;
+	if (!_editBuffer.empty())
+	{
+		int value = 0;
+		for (wchar_t ch : _editBuffer)
+			value = value * 10 + (int)(ch - L'0');
+		if (_editField == EditField::Hour)
+			value = std::clamp(value, 0, 23);
+		else
+			value = std::clamp(value, 0, 59);
+		SYSTEMTIME nv = _value;
+		if (_editField == EditField::Hour)
+			nv.wHour = (WORD)value;
+		else
+			nv.wMinute = (WORD)value;
+		SetValueInternal(nv, true);
+	}
+	_editBuffer.clear();
+	if (!keepEditing)
+		_editField = EditField::None;
+	PostRender();
+}
+
+void DateTimePicker::CancelTimeEdit()
+{
+	if (_editField == EditField::None) return;
+	_editBuffer.clear();
+	_editField = EditField::None;
+	PostRender();
+}
+
+bool DateTimePicker::HandleTimeEditChar(wchar_t ch)
+{
+	if (_editField == EditField::None) return false;
+	if (ch >= L'0' && ch <= L'9')
+	{
+		if (_editBuffer.size() >= 2)
+			_editBuffer.clear();
+		_editBuffer.push_back(ch);
+		if (_editBuffer.size() >= 2)
+			CommitTimeEdit(true);
+		else
+			PostRender();
+		return true;
+	}
+	if (ch == 8)
+	{
+		if (!_editBuffer.empty())
+		{
+			_editBuffer.pop_back();
+			PostRender();
+		}
+		return true;
+	}
+	if (ch == L'\r')
+	{
+		CommitTimeEdit(false);
+		return true;
+	}
+	return false;
+}
+
+std::wstring DateTimePicker::GetTimeEditText(EditField field, int value) const
+{
+	std::wstring text = StringHelper::Format(L"%02d", value);
+	if (_editField != field || _editBuffer.empty())
+		return text;
+	if (_editBuffer.size() == 1)
+		return std::wstring(L"0") + _editBuffer;
+	return _editBuffer.substr(0, 2);
+}
+
+bool DateTimePicker::IsInlineTimeMode() const
+{
+	return _showTime && !_showDate;
+}
+
+bool DateTimePicker::GetInlineTimeLayout(LayoutMetrics& out)
+{
+	if (this->Width <= 0 || this->Height <= 0) return false;
+
+	const float pad = 8.0f;
+	out = LayoutMetrics{};
+	out.contentLeft = pad;
+	out.contentWidth = std::max(0.0f, (float)this->Width - pad * 2.0f);
+	out.showDate = false;
+	out.showTime = true;
+	out.showToggleRow = false;
+
+	float timeHeight = std::min(32.0f, (float)this->Height - 6.0f);
+	if (timeHeight < 18.0f)
+		timeHeight = std::max(0.0f, (float)this->Height - 4.0f);
+	float y = std::max(0.0f, ((float)this->Height - timeHeight) * 0.5f);
+
+	out.timeTop = y;
+	out.timeHeight = timeHeight;
+	float fieldW = std::min(64.0f, std::max(44.0f, out.contentWidth * 0.28f));
+	float gap = 10.0f;
+	float centerX = out.contentLeft + out.contentWidth * 0.5f;
+	out.hourRect = { centerX - fieldW - gap, y, centerX - gap, y + out.timeHeight };
+	out.minuteRect = { centerX + gap, y, centerX + gap + fieldW, y + out.timeHeight };
+	const float arrowW = 16.0f;
+	out.hourUpRect = { out.hourRect.right - arrowW, y, out.hourRect.right, y + out.timeHeight * 0.5f };
+	out.hourDownRect = { out.hourRect.right - arrowW, y + out.timeHeight * 0.5f, out.hourRect.right, y + out.timeHeight };
+	out.minuteUpRect = { out.minuteRect.right - arrowW, y, out.minuteRect.right, y + out.timeHeight * 0.5f };
+	out.minuteDownRect = { out.minuteRect.right - arrowW, y + out.timeHeight * 0.5f, out.minuteRect.right, y + out.timeHeight };
+	out.dropHeight = 0.0f;
+	return true;
+}
+
 void DateTimePicker::SetValueInternal(const SYSTEMTIME& value, bool fireEvent)
 {
 	bool changed = _value.wYear != value.wYear || _value.wMonth != value.wMonth ||
@@ -668,7 +979,16 @@ bool DateTimePicker::GetLayoutMetrics(LayoutMetrics& out)
 		out.gridTop = y;
 		out.cellWidth = out.contentWidth / 7.0f;
 		out.cellHeight = std::clamp(out.cellWidth, 22.0f, 32.0f);
-		y += out.cellHeight * 6.0f + 6.0f;
+		{
+			int first = FirstWeekday(_viewYear, _viewMonth);
+			int days = DaysInMonth(_viewYear, _viewMonth);
+			int cells = first + days;
+			int rows = (cells + 6) / 7;
+			out.gridRows = std::clamp(rows, 4, 6);
+		}
+		y += out.cellHeight * out.gridRows;
+		if (_showTime)
+			y += 6.0f;
 	}
 
 	out.showTime = _showTime;
@@ -686,7 +1006,7 @@ bool DateTimePicker::GetLayoutMetrics(LayoutMetrics& out)
 		out.hourDownRect = { out.hourRect.right - arrowW, y + out.timeHeight * 0.5f, out.hourRect.right, y + out.timeHeight };
 		out.minuteUpRect = { out.minuteRect.right - arrowW, y, out.minuteRect.right, y + out.timeHeight * 0.5f };
 		out.minuteDownRect = { out.minuteRect.right - arrowW, y + out.timeHeight * 0.5f, out.minuteRect.right, y + out.timeHeight };
-		y += out.timeHeight + 6.0f;
+		y += out.timeHeight;
 	}
 
 	out.dropHeight = (y + pad) - baseTop;
@@ -700,7 +1020,7 @@ bool DateTimePicker::HitTestDayCell(const LayoutMetrics& layout, int xof, int yo
 	float gridLeft = layout.contentLeft;
 	float gridTop = layout.gridTop;
 	float gridRight = gridLeft + layout.cellWidth * 7.0f;
-	float gridBottom = gridTop + layout.cellHeight * 6.0f;
+	float gridBottom = gridTop + layout.cellHeight * layout.gridRows;
 	if (xof < gridLeft || xof > gridRight || yof < gridTop || yof > gridBottom)
 		return false;
 
@@ -720,7 +1040,8 @@ bool DateTimePicker::HitTestDayCell(const LayoutMetrics& layout, int xof, int yo
 void DateTimePicker::UpdateHoverState(int xof, int yof)
 {
 	LayoutMetrics layout{};
-	if (!GetLayoutMetrics(layout)) return;
+	bool hasLayout = IsInlineTimeMode() ? GetInlineTimeLayout(layout) : GetLayoutMetrics(layout);
+	if (!hasLayout) return;
 	int day = -1;
 	auto part = HitTestPart(layout, xof, yof, day);
 	if (part != _hoverPart || day != _hoverDay)
@@ -756,6 +1077,8 @@ DateTimePicker::HitPart DateTimePicker::HitTestPart(const LayoutMetrics& layout,
 		if (inRect(layout.hourDownRect)) return HitPart::HourDown;
 		if (inRect(layout.minuteUpRect)) return HitPart::MinuteUp;
 		if (inRect(layout.minuteDownRect)) return HitPart::MinuteDown;
+		if (inRect(layout.hourRect)) return HitPart::HourField;
+		if (inRect(layout.minuteRect)) return HitPart::MinuteField;
 	}
 	return HitPart::None;
 }
@@ -766,6 +1089,7 @@ void DateTimePicker::ToggleDateSection()
 	bool next = !_showDate;
 	if (!next && !_showTime) return;
 	_showDate = next;
+	EnsureShowFlags();
 	UpdateDisplayText();
 	if (this->Expand && this->ParentForm) this->ParentForm->Invalidate(true);
 	PostRender();
@@ -776,7 +1100,10 @@ void DateTimePicker::ToggleTimeSection()
 	if (!_allowTime) return;
 	bool next = !_showTime;
 	if (!next && !_showDate) return;
+	if (!next)
+		CommitTimeEdit(false);
 	_showTime = next;
+	EnsureShowFlags();
 	UpdateDisplayText();
 	if (this->Expand && this->ParentForm) this->ParentForm->Invalidate(true);
 	PostRender();
@@ -784,6 +1111,8 @@ void DateTimePicker::ToggleTimeSection()
 
 void DateTimePicker::SetExpanded(bool value)
 {
+	if (value && IsInlineTimeMode())
+		value = false;
 	if (Expand == value) return;
 	Expand = value;
 	if (this->ParentForm)
@@ -796,6 +1125,7 @@ void DateTimePicker::SetExpanded(bool value)
 	}
 	if (!Expand)
 	{
+		CommitTimeEdit(false);
 		_hoverPart = HitPart::None;
 		_hoverDay = -1;
 	}

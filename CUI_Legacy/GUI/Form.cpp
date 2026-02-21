@@ -7,14 +7,9 @@
 #include <shellapi.h>
 #include <dwmapi.h>
 #include <windowsx.h>
-#pragma comment(lib, "Dwmapi.lib")
 
 #ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0
-#endif
-
-#ifndef WM_CUI_RENDER_TARGET_RECREATED
-#define WM_CUI_RENDER_TARGET_RECREATED (WM_APP + 0x5A1)
 #endif
 
 HCURSOR Form::GetSystemCursor(CursorKind kind)
@@ -874,6 +869,8 @@ SET_CPP(Form, bool, ShowInTaskBar)
 
 Form::Form(std::wstring text, POINT _location, SIZE _size)
 {
+	Application::EnsureDpiAwareness();
+
 	this->_text = text;
 	static bool ClassInited = false;
 	this->Location = _location;
@@ -919,23 +916,111 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 
 
 	Application::Forms.Add(this->Handle, this);
-
-	// Win7 兼容版：不使用 DirectComposition / swapchain composition
 	Render = new HwndGraphics(this->Handle);
-	Render->SetDpi(96.0f, 96.0f);
-	OverlayRender = nullptr;
+	ResetImageCache();
 	ClearCaptionStates();
+	// 注意：不要在构造阶段仅缩放字体/标题栏，否则会导致“画面变大但窗口/命中区域不一致”。
+	// 初始 DPI 缩放统一放到 Show()/ShowDialog() 之前执行（见 EnsureInitialDpiApplied）。
+}
+
+Form::~Form()
+{
+	CleanupResources();
+}
+
+void Form::CleanupResources()
+{
+	if (_resourcesCleaned)
+		return;
+	_resourcesCleaned = true;
+	if (this->Handle && _dropRegistered)
+	{
+		RevokeDragDrop(this->Handle);
+		_dropRegistered = false;
+	}
+	if (_dropTarget)
+	{
+		_dropTarget->Release();
+		_dropTarget = nullptr;
+	}
+
+	auto isDescendant = [&](Control* root, Control* node, const auto& self) -> bool
+		{
+			if (!root || !node) return false;
+			for (int i = 0; i < root->Count; i++)
+			{
+				auto child = root->operator[](i);
+				if (child == node) return true;
+				if (self(child, node, self)) return true;
+			}
+			return false;
+		};
+
+	auto isOwnedByRootControls = [&](Control* node) -> bool
+		{
+			if (!node) return false;
+			for (auto c : this->Controls)
+			{
+				if (c == node) return true;
+				if (isDescendant(c, node, isDescendant)) return true;
+			}
+			return false;
+		};
+
+	if (this->ForegroundControl && !isOwnedByRootControls(this->ForegroundControl))
+	{
+		delete this->ForegroundControl;
+	}
+	this->ForegroundControl = nullptr;
+
+	for (auto c : this->Controls)
+	{
+		delete c;
+	}
+	this->Controls.Clear();
+	if (this->_scaledDefaultFont)
+	{
+		delete this->_scaledDefaultFont;
+		this->_scaledDefaultFont = nullptr;
+		this->_scaledDefaultFontDpi = 0;
+	}
+
+	this->Selected = nullptr;
+	this->UnderMouse = nullptr;
+	this->MainMenu = nullptr;
+	this->MainStatusBar = nullptr;
+
+	this->_imageSource.reset();
+	ResetImageCache();
+
+	if (this->_font && this->_ownsFont)
+	{
+		delete this->_font;
+	}
+	this->_font = nullptr;
+	this->_ownsFont = false;
+
+	if (Render)
+	{
+		delete Render;
+		Render = nullptr;
+	}
+	if (_layoutEngine)
+	{
+		delete _layoutEngine;
+		_layoutEngine = nullptr;
+	}
 }
 
 Font* Form::GetScaledDefaultFont()
 {
-	UINT dpi = this->_dpi ? this->_dpi : 96;
-	if (_scaledDefaultFont && _scaledDefaultFontDpi == dpi)
-		return _scaledDefaultFont;
-	if (_scaledDefaultFont)
+	const UINT dpi = this->_dpi ? this->_dpi : 96;
+	if (this->_scaledDefaultFont && this->_scaledDefaultFontDpi == dpi)
+		return this->_scaledDefaultFont;
+	if (this->_scaledDefaultFont)
 	{
-		delete _scaledDefaultFont;
-		_scaledDefaultFont = nullptr;
+		delete this->_scaledDefaultFont;
+		this->_scaledDefaultFont = nullptr;
 	}
 	// 以默认字体为基准按 DPI 缩放字号
 	auto base = GetDefaultFontObject();
@@ -1003,8 +1088,9 @@ void Form::ApplyDpiChange(UINT newDpi)
 	this->_dpi = newDpi;
 	if (oldContentDpi == newDpi) return;
 
+	// 标题栏与默认字体（基于 96DPI 基准计算，避免累积误差）
 	this->HeadHeight = Application::ScaleInt(this->_headHeightBase96, 96, newDpi);
-	this->_scaledDefaultFontDpi = 0;
+	this->_scaledDefaultFontDpi = 0; // 让 GetScaledDefaultFont() 重新生成
 
 	if (this->_font && this->_ownsFont)
 		this->_font->FontSize = Application::ScaleFloat(this->_font->FontSize, oldContentDpi, newDpi);
@@ -1013,7 +1099,18 @@ void Form::ApplyDpiChange(UINT newDpi)
 	this->_contentDpi = newDpi;
 	this->InvalidateLayout();
 	this->_hasRenderedOnce = false;
-	this->Invalidate(false);
+	this->Invalidate(true);
+}
+
+void Form::SyncRenderSizeToClient()
+{
+	if (!this->Handle || !this->Render) return;
+	RECT rc{};
+	::GetClientRect(this->Handle, &rc);
+	UINT width = (UINT)std::max<LONG>(1, rc.right - rc.left);
+	UINT height = (UINT)std::max<LONG>(1, rc.bottom - rc.top);
+	this->Render->ReSize(width, height);
+	this->CommitComposition();
 }
 
 void Form::EnsureInitialDpiApplied()
@@ -1029,7 +1126,10 @@ void Form::EnsureInitialDpiApplied()
 	if (this->_contentDpi == 0) this->_contentDpi = 96;
 	if (this->_headHeightBase96 <= 0) this->_headHeightBase96 = 24;
 
-	// 1) 首次显示前先把窗口大小按 96->dpi 缩放一次
+	// 如果当前 DPI != 基准 DPI(96)，则：
+	// 1) 先把窗口大小/位置缩放到匹配 DPI（保持当前中心点不变）
+	// 2) 再把控件树/字体/标题栏一起做一次 96->dpi 的缩放
+	// 1) 窗口大小：如果系统尚未通过 WM_DPICHANGED 的建议矩形帮我们调好，则这里按 96->dpi 缩放一次
 	if (!this->_initialWindowRectApplied)
 	{
 		RECT wr{};
@@ -1041,106 +1141,15 @@ void Form::EnsureInitialDpiApplied()
 		const int x = wr.left + (oldW - newW) / 2;
 		const int y = wr.top + (oldH - newH) / 2;
 		SetWindowPos(this->Handle, NULL, x, y, newW, newH, SWP_NOZORDER | SWP_NOACTIVATE);
+		// 某些情况下（尤其是首次显示前）SetWindowPos 不一定能及时触发有效的 WM_SIZE -> swapchain resize。
+		// 这里强制同步一次渲染目标尺寸，避免扩大后的区域未被绘制而看起来“透明”。
 		SyncRenderSizeToClient();
 		this->_hasRenderedOnce = false;
-		this->Invalidate(false);
+		this->Invalidate(true);
 	}
 
-	// 2) 控件树/字体/标题栏统一做一次 96->dpi 缩放
+	// 2) 控件树：无论窗口创建时是否收到过 WM_DPICHANGED，都在首次 Show 前把控件树缩放到当前 DPI
 	ApplyDpiChange(dpi);
-}
-
-Form::~Form()
-{
-	CleanupResources();
-}
-
-void Form::CleanupResources()
-{
-	if (_resourcesCleaned)
-		return;
-	_resourcesCleaned = true;
-	if (_scaledDefaultFont)
-	{
-		delete _scaledDefaultFont;
-		_scaledDefaultFont = nullptr;
-		_scaledDefaultFontDpi = 0;
-	}
-	if (this->Handle && _dropRegistered)
-	{
-		RevokeDragDrop(this->Handle);
-		_dropRegistered = false;
-	}
-	if (_dropTarget)
-	{
-		_dropTarget->Release();
-		_dropTarget = nullptr;
-	}
-
-	auto isDescendant = [&](Control* root, Control* node, const auto& self) -> bool
-		{
-			if (!root || !node) return false;
-			for (int i = 0; i < root->Count; i++)
-			{
-				auto child = root->operator[](i);
-				if (child == node) return true;
-				if (self(child, node, self)) return true;
-			}
-			return false;
-		};
-
-	auto isOwnedByRootControls = [&](Control* node) -> bool
-		{
-			if (!node) return false;
-			for (auto c : this->Controls)
-			{
-				if (c == node) return true;
-				if (isDescendant(c, node, isDescendant)) return true;
-			}
-			return false;
-		};
-
-	if (this->ForegroundControl && !isOwnedByRootControls(this->ForegroundControl))
-	{
-		delete this->ForegroundControl;
-	}
-	this->ForegroundControl = nullptr;
-
-	for (auto c : this->Controls)
-	{
-		delete c;
-	}
-	this->Controls.Clear();
-
-	this->Selected = nullptr;
-	this->UnderMouse = nullptr;
-	this->MainMenu = nullptr;
-
-	this->_imageSource.reset();
-	ResetImageCache();
-
-	if (this->_font && this->_ownsFont)
-	{
-		delete this->_font;
-	}
-	this->_font = nullptr;
-	this->_ownsFont = false;
-
-	if (OverlayRender)
-	{
-		delete OverlayRender;
-		OverlayRender = nullptr;
-	}
-	if (Render)
-	{
-		delete Render;
-		Render = nullptr;
-	}
-	if (_layoutEngine)
-	{
-		delete _layoutEngine;
-		_layoutEngine = nullptr;
-	}
 }
 
 void Form::EnsureOleInitialized()
@@ -1190,6 +1199,54 @@ void Form::ResetImageCache()
 {
 	_imageCache.Reset();
 	_imageCacheTarget = nullptr;
+}
+
+IDCompositionDevice* Form::GetDCompDevice() const
+{
+	return nullptr;
+}
+
+IDCompositionVisual* Form::GetWebContainerVisual() const
+{
+	return nullptr;
+}
+
+void Form::CommitComposition()
+{
+}
+
+void Form::RecoverRenderIfNeeded()
+{
+	if (_recoveringDeviceLost)
+		return;
+	_recoveringDeviceLost = true;
+
+	// 只有在句柄存在时才尝试恢复
+	if (!this->Handle || !::IsWindow(this->Handle))
+	{
+		_recoveringDeviceLost = false;
+		return;
+	}
+
+	bool need = false;
+	if (this->Render && this->Render->IsDeviceLost()) need = true;
+	if (!need)
+	{
+		_recoveringDeviceLost = false;
+		return;
+	}
+	if (this->Render)
+	{
+		delete this->Render;
+		this->Render = nullptr;
+	}
+
+	Render = new HwndGraphics(this->Handle);
+
+	SyncRenderSizeToClient();
+	this->_hasRenderedOnce = false;
+	this->Invalidate(true);
+	_recoveringDeviceLost = false;
 }
 
 void Form::SetLayoutEngine(class LayoutEngine* engine)
@@ -1342,24 +1399,12 @@ void Form::PerformLayout()
 	_needsLayout = false;
 }
 
-void Form::SyncRenderSizeToClient()
-{
-	if (!this->Handle || !this->Render) return;
-	RECT rc{};
-	::GetClientRect(this->Handle, &rc);
-	UINT width = (UINT)std::max<LONG>(1, rc.right - rc.left);
-	UINT height = (UINT)std::max<LONG>(1, rc.bottom - rc.top);
-	this->Render->ReSize(width, height);
-	if (this->OverlayRender) this->OverlayRender->ReSize(width, height);
-}
-
 void Form::Show()
 {
 	EnsureInitialDpiApplied();
 	if (this->Icon) SendMessage(this->Handle, WM_SETICON, ICON_BIG, (LPARAM)this->Icon);
 	SetWindowLong(this->Handle, GWL_STYLE, WS_POPUP);
 	ShowWindow(this->Handle, SW_SHOWNORMAL);
-	SyncRenderSizeToClient();
 	this->OnSizeChanged(this);
 	this->Invalidate(true);
 }
@@ -1395,6 +1440,7 @@ static HWND GetBestOwnerWindowInCurrentProcess(HWND exclude = NULL)
 
 void Form::ShowDialog(HWND parent)
 {
+	EnsureInitialDpiApplied();
 	HWND owner = parent;
 	if (!owner)
 		owner = GetBestOwnerWindowInCurrentProcess(this->Handle);
@@ -1409,12 +1455,9 @@ void Form::ShowDialog(HWND parent)
 		EnableWindow(owner, FALSE);
 	}
 
-	EnsureInitialDpiApplied();
-
 	if (this->Icon) SendMessage(this->Handle, WM_SETICON, ICON_BIG, (LPARAM)this->Icon);
 	SetWindowLong(this->Handle, GWL_STYLE, WS_POPUP);
 	ShowWindow(this->Handle, SW_SHOWNORMAL);
-	SyncRenderSizeToClient();
 	this->OnSizeChanged(this);
 	this->Invalidate(true);
 	SetForegroundWindow(this->Handle);
@@ -1505,6 +1548,8 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 	this->Render->ClearTransform();
 	this->Render->PushDrawRect((float)drawRc.left, (float)drawRc.top, (float)(drawRc.right - drawRc.left), (float)(drawRc.bottom - drawRc.top));
 	this->Render->FillRect((float)drawRc.left, (float)drawRc.top, (float)(drawRc.right - drawRc.left), (float)(drawRc.bottom - drawRc.top), this->BackColor);
+	this->Render->DrawRect((float)drawRc.left, (float)drawRc.top, (float)(drawRc.right - drawRc.left), (float)(drawRc.bottom - drawRc.top), Colors::White, 2.0f);
+	this->Render->DrawRect((float)drawRc.left, (float)drawRc.top, (float)(drawRc.right - drawRc.left), (float)(drawRc.bottom - drawRc.top), Colors::Black, 1.0f);
 
 	if (this->Image)
 	{
@@ -1634,12 +1679,6 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 		{
 			auto c = this->Controls[i]; if (!c->Visible)continue;
 			// 主菜单/置顶控件在有 Overlay 时由 Overlay 层单独绘制，避免重复
-			if (this->OverlayRender)
-			{
-				if (c == this->ForegroundControl) continue;
-				if (c == this->MainMenu) continue;
-				if (this->MainStatusBar && this->MainStatusBar->TopMost && c == this->MainStatusBar) continue;
-			}
 			// 状态栏（TopMost=true）单独绘制，避免被普通控件覆盖
 			if (this->MainStatusBar && this->MainStatusBar->TopMost && c == this->MainStatusBar)
 				continue;
@@ -1657,7 +1696,6 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 		}
 
 		// 如果主菜单展开/前景控件可见，它们应覆盖在状态栏之上
-		if (!this->OverlayRender)
 		{
 			if (this->MainMenu && this->MainMenu->Visible)
 			{
@@ -1678,55 +1716,9 @@ bool Form::UpdateDirtyRect(const RECT& dirty, bool force)
 
 	this->Render->PopDrawRect();
 	this->Render->EndRender();
+	RecoverRenderIfNeeded();
 
-	if (this->OverlayRender)
-	{
-		auto* oldRender = this->Render;
-		RECT fullClient{};
-		::GetClientRect(this->Handle, &fullClient);
-		RECT overlayRc = fullClient;
-
-		this->OverlayRender->BeginRender();
-		this->OverlayRender->ClearTransform();
-		this->OverlayRender->Clear(D2D1_COLOR_F{ 0.0f,0.0f,0.0f,0.0f });
-		this->OverlayRender->PushDrawRect((float)overlayRc.left, (float)overlayRc.top, (float)(overlayRc.right - overlayRc.left), (float)(overlayRc.bottom - overlayRc.top));
-
-		RECT overlayContent = fullClient;
-		const int top = ClientTop();
-		overlayContent.top -= top;
-		overlayContent.bottom -= top;
-		if (overlayContent.top < 0) overlayContent.top = 0;
-		if (overlayContent.left < 0) overlayContent.left = 0;
-		if (overlayContent.right > this->Size.cx) overlayContent.right = this->Size.cx;
-		if (overlayContent.bottom > (this->Size.cy - top)) overlayContent.bottom = (this->Size.cy - top);
-
-		if (overlayContent.right > overlayContent.left && overlayContent.bottom > overlayContent.top)
-		{
-			this->OverlayRender->SetTransform(D2D1::Matrix3x2F::Translation(0.0f, (float)top));
-			this->OverlayRender->PushDrawRect((float)overlayContent.left, (float)overlayContent.top, (float)(overlayContent.right - overlayContent.left), (float)(overlayContent.bottom - overlayContent.top));
-
-			this->Render = this->OverlayRender;
-			if (this->MainStatusBar && this->MainStatusBar->TopMost && this->MainStatusBar->Visible)
-			{
-				this->MainStatusBar->Update();
-			}
-			if (this->MainMenu && this->MainMenu->Visible)
-			{
-				this->MainMenu->Update();
-			}
-			if (this->ForegroundControl && this->ForegroundControl->Visible && this->ForegroundControl != (Control*)this->MainMenu)
-			{
-				this->ForegroundControl->Update();
-			}
-			this->Render = oldRender;
-
-			this->OverlayRender->PopDrawRect();
-			this->OverlayRender->ClearTransform();
-		}
-
-		this->OverlayRender->PopDrawRect();
-		this->OverlayRender->EndRender();
-	}
+	this->CommitComposition();
 
 	this->ControlChanged = false;
 	this->_hasRenderedOnce = true;
@@ -1886,8 +1878,12 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 		{
 			if (!(this->VisibleHead && mouse.y < top))
 			{
-				if (::GetFocus() != this->Handle)
-					::SetFocus(this->Handle);
+				Control* hit = HitTestControlAt(contentMouse);
+				if (!(hit && hit->Type() == UIClass::UI_WebBrowser))
+				{
+					if (::GetFocus() != this->Handle)
+						::SetFocus(this->Handle);
+				}
 			}
 		}
 
@@ -2044,11 +2040,11 @@ bool Form::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam, int xof, i
 		UINT height = HIWORD(lParam);
 		GetClientRect(this->Handle, &rec);
 		this->Render->ReSize(width, height);
-		if (this->OverlayRender) this->OverlayRender->ReSize(width, height);
 		this->InvalidateLayout();
+		this->CommitComposition();
 		this->_hasRenderedOnce = false;
 		this->OnSizeChanged(this);
-		this->Invalidate(false);
+		this->Invalidate(true);
 	}
 	break;
 	case WM_MOVE:
@@ -2206,16 +2202,14 @@ D2D1_RECT_F Form::ChildRect()
 }
 LRESULT CustomFrameHitTest(HWND _hWnd, WPARAM wParam, LPARAM lParam, int captionHeight, UINT dpi)
 {
-	// 边框命中宽度按 DPI 缩放，避免高 DPI 下 resize 命中区域过窄。
-	const int SCALER_WIDTH = Application::ScaleInt(8, 96, dpi ? dpi : 96);
-#define BORDER_WIDTH 1
+	const int scalerWidth = (std::max)(1, Application::ScaleInt(8, 96, dpi));
 	RECT wr, cr;
 	const POINT ptMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 	GetWindowRect(_hWnd, &wr);
-	cr.left = wr.left + SCALER_WIDTH;
-	cr.right = wr.right - SCALER_WIDTH;
-	cr.bottom = wr.bottom - SCALER_WIDTH;
-	cr.top = wr.top + SCALER_WIDTH;
+	cr.left = wr.left + scalerWidth;
+	cr.right = wr.right - scalerWidth;
+	cr.bottom = wr.bottom - scalerWidth;
+	cr.top = wr.top + scalerWidth;
 
 	uint8_t pos_code = 0;
 	if (ptMouse.x < wr.left || ptMouse.x > wr.right || ptMouse.y < wr.top || ptMouse.y > wr.bottom)
@@ -2265,24 +2259,9 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 	Form* form = (Form*)(GetWindowLongPtrW(hWnd, GWLP_USERDATA) ^ 0xFFFFFFFFFFFFFFFF);
 	if ((ULONG64)form != 0xFFFFFFFFFFFFFFFF && Application::Forms.ContainsKey(form->Handle))
 	{
-		if (message == WM_CUI_RENDER_TARGET_RECREATED)
-		{
-			// 清理所有可能持有旧 ID2D1Bitmap 的缓存，避免继续绘制导致 EndDraw 永远失败。
-			form->ResetImageCache();
-			for (auto c : form->Controls)
-			{
-				if (c) c->OnRenderTargetRecreated();
-			}
-			if (form->ForegroundControl) form->ForegroundControl->OnRenderTargetRecreated();
-			if (form->MainMenu) ((Control*)form->MainMenu)->OnRenderTargetRecreated();
-			if (form->MainStatusBar) ((Control*)form->MainStatusBar)->OnRenderTargetRecreated();
-			form->_hasRenderedOnce = false;
-			form->Invalidate(true);
-			return 0;
-		}
-
 		if (message == WM_DPICHANGED)
 		{
+			UINT newDpi = HIWORD(wParam);
 			RECT* suggested = (RECT*)lParam;
 			if (suggested)
 			{
@@ -2292,22 +2271,19 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 					suggested->right - suggested->left,
 					suggested->bottom - suggested->top,
 					SWP_NOZORDER | SWP_NOACTIVATE);
+				form->_initialWindowRectApplied = !form->_initialDpiApplied;
 			}
-			UINT newDpi = HIWORD(wParam);
-			// 首次显示前可能控件树未构造完成：先只记录 DPI，真正缩放留到 Show 前。
+			// 尺寸/DPI 变化后，强制同步渲染目标尺寸并安排一次重绘，避免出现新区域未刷新。
+			form->SyncRenderSizeToClient();
+			form->_hasRenderedOnce = false;
+			form->Invalidate(true);
+			// 若窗口尚未首次显示，控件树可能还未构造完成：此时只记录 DPI，真正缩放留到 Show 前。
 			if (!form->_initialDpiApplied)
 			{
 				form->_dpi = newDpi;
-				form->_initialWindowRectApplied = true;
-				form->SyncRenderSizeToClient();
-				form->_hasRenderedOnce = false;
-				form->Invalidate(false);
 				return 0;
 			}
 			form->ApplyDpiChange(newDpi);
-			form->SyncRenderSizeToClient();
-			form->_hasRenderedOnce = false;
-			form->Invalidate(false);
 			return 0;
 		}
 
@@ -2338,7 +2314,27 @@ LRESULT CALLBACK Form::WINMSG_PROCESS(HWND hWnd, UINT message, WPARAM wParam, LP
 					return 0;
 				}
 
-				if (form->ControlChanged || !form->_hasRenderedOnce)
+				bool hasVisibleWebBrowser = false;
+				std::function<void(Control*)> checkWebBrowser;
+				checkWebBrowser = [&](Control* c) {
+					if (!c || !c->Visible) return;
+					if (c->Type() == UIClass::UI_WebBrowser) {
+						hasVisibleWebBrowser = true;
+						return;
+					}
+					for (int i = 0; i < c->Count && !hasVisibleWebBrowser; i++)
+						checkWebBrowser(c->operator[](i));
+				};
+				
+				for (auto c : form->Controls)
+					if (!hasVisibleWebBrowser)
+						checkWebBrowser(c);
+				if (!hasVisibleWebBrowser && form->MainMenu)
+					checkWebBrowser((Control*)form->MainMenu);
+				if (!hasVisibleWebBrowser && form->ForegroundControl)
+					checkWebBrowser(form->ForegroundControl);
+				
+				if (hasVisibleWebBrowser || form->ControlChanged || !form->_hasRenderedOnce)
 					form->UpdateDirtyRect(ps.rcPaint, true);
 			}
 			EndPaint(hWnd, &ps);

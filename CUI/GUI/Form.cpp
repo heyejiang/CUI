@@ -938,14 +938,14 @@ Form::Form(std::wstring text, POINT _location, SIZE _size)
 	if (_dcompHost && SUCCEEDED(_dcompHost->Initialize()) &&
 		_dcompHost->GetBaseSwapChain() && _dcompHost->GetOverlaySwapChain())
 	{
-		Render = new CompositionSwapChainGraphics1(_dcompHost->GetBaseSwapChain());
-		OverlayRender = new CompositionSwapChainGraphics1(_dcompHost->GetOverlaySwapChain());
+		Render = new CompositionSwapChainGraphics(_dcompHost->GetBaseSwapChain());
+		OverlayRender = new CompositionSwapChainGraphics(_dcompHost->GetOverlaySwapChain());
 	}
 	else
 	{
 		delete _dcompHost;
 		_dcompHost = nullptr;
-		Render = new HwndGraphics1(this->Handle);
+		Render = new HwndGraphics(this->Handle);
 		OverlayRender = nullptr;
 	}
 	ResetImageCache();
@@ -1307,14 +1307,14 @@ void Form::RecoverRenderIfNeeded()
 	if (_dcompHost && SUCCEEDED(_dcompHost->Initialize()) &&
 		_dcompHost->GetBaseSwapChain() && _dcompHost->GetOverlaySwapChain())
 	{
-		Render = new CompositionSwapChainGraphics1(_dcompHost->GetBaseSwapChain());
-		OverlayRender = new CompositionSwapChainGraphics1(_dcompHost->GetOverlaySwapChain());
+		Render = new CompositionSwapChainGraphics(_dcompHost->GetBaseSwapChain());
+		OverlayRender = new CompositionSwapChainGraphics(_dcompHost->GetOverlaySwapChain());
 	}
 	else
 	{
 		delete _dcompHost;
 		_dcompHost = nullptr;
-		Render = new HwndGraphics1(this->Handle);
+		Render = new HwndGraphics(this->Handle);
 		OverlayRender = nullptr;
 	}
 
